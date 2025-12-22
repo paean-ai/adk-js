@@ -10,7 +10,7 @@ import {z} from 'zod';
 import {createEvent, createNewEventId, Event, getFunctionCalls, getFunctionResponses, isFinalResponse} from '../events/event.js';
 import {BaseExampleProvider} from '../examples/base_example_provider.js';
 import {Example} from '../examples/example.js';
-import {BaseLlm} from '../models/base_llm.js';
+import {BaseLlm, isBaseLlm} from '../models/base_llm.js';
 import {appendInstructions, LlmRequest, setOutputSchema} from '../models/llm_request.js';
 import {LlmResponse} from '../models/llm_response.js';
 import {LLMRegistry} from '../models/registry.js';
@@ -778,9 +778,10 @@ export class LlmAgent extends BaseAgent {
    * When not set, the agent will inherit the model from its ancestor.
    */
   get canonicalModel(): BaseLlm {
-    if (this.model instanceof BaseLlm) {
+    if (isBaseLlm(this.model)) {
       return this.model;
     }
+
     if (typeof this.model === 'string' && this.model) {
       return LLMRegistry.newLlm(this.model);
     }

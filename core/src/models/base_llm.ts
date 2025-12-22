@@ -10,10 +10,19 @@ import {BaseLlmConnection} from './base_llm_connection.js';
 import {LlmRequest} from './llm_request.js';
 import {LlmResponse} from './llm_response.js';
 
+const BASE_MODEL_SYMBOL = Symbol('baseModel');
+
+export function isBaseLlm(obj: unknown): obj is BaseLlm {
+  return typeof obj === 'object' && obj !== null && BASE_MODEL_SYMBOL in obj &&
+      obj[BASE_MODEL_SYMBOL] === true;
+}
+
 /**
  * The BaseLLM class.
  */
 export abstract class BaseLlm {
+  readonly[BASE_MODEL_SYMBOL] = true;
+
   readonly model: string;
 
   /**

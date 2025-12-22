@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseLlm, BaseLlmConnection, LlmRequest, LlmResponse} from '@google/adk';
+import {BaseLlm, BaseLlmConnection, isBaseLlm, LlmRequest, LlmResponse} from '@google/adk';
 
 import {version} from '../../src/version.js';
 
@@ -23,6 +23,20 @@ class TestLlm extends BaseLlm {
   }
   getTrackingHeaders(): Record<string, string> {
     return this.trackingHeaders;
+  }
+}
+
+class FakeLlm {
+  private readonly model: string = 'fake-llm';
+
+  generateContentAsync(
+      llmRequest: LlmRequest,
+      stream?: boolean,
+      ): AsyncGenerator<LlmResponse, void> {
+    throw new Error('Not implemented');
+  }
+  connect(llmRequest: LlmRequest): Promise<BaseLlmConnection> {
+    throw new Error('Not implemented');
   }
 }
 
@@ -48,4 +62,25 @@ describe('BaseLlm', () => {
        expect(headers['x-goog-api-client']).toEqual(expectedValue);
        expect(headers['user-agent']).toEqual(expectedValue);
      });
+});
+
+describe('isBaseLlm', () => {
+  it('should return true for BaseLlm', () => {
+    const llm = new TestLlm();
+    expect(isBaseLlm(llm)).toBeTrue();
+  });
+
+  it('should return false for non-BaseLlm', () => {
+    expect(isBaseLlm(123)).toBeFalse();
+  });
+
+  it('should return false for null', () => {
+    expect(isBaseLlm({
+      model: 'test-llm',
+    })).toBeFalse();
+  });
+
+  it('should return false for FakeLlm instance (not extending BaseLlm)', () => {
+    expect(isBaseLlm(new FakeLlm())).toBeFalse();
+  });
 });
