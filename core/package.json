@@ -1,12 +1,12 @@
 {
-  "name": "@google/adk",
+  "name": "@paean-ai/adk",
   "version": "0.2.1",
-  "description": "Google ADK JS",
-  "author": "Google",
+  "description": "Google ADK JS (paean-ai fork with streaming fixes)",
+  "author": "paean-ai",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/google/adk-js"
+    "url": "https://github.com/paean-ai/adk-js"
   },
   "files": [
     "package.json",
