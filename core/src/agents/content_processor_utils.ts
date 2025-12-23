@@ -26,7 +26,8 @@ export function getContents(
   for (const event of events) {
     // Skip events without content, or generated neither by user nor by model.
     // E.g. events purely for mutating session states.
-    if (!event.content?.role || event.content.parts?.[0]?.text === '') {
+    // Also skip events with empty parts array (can happen during streaming with parallel tool calls)
+    if (!event.content?.role || !event.content.parts?.length) {
       continue;
     }
 
