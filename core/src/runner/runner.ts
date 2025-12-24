@@ -13,7 +13,6 @@ import {LlmAgent} from '../agents/llm_agent.js';
 import {createRunConfig, RunConfig} from '../agents/run_config.js';
 import {BaseArtifactService} from '../artifacts/base_artifact_service.js';
 import {BaseCredentialService} from '../auth/credential_service/base_credential_service.js';
-import {BuiltInCodeExecutor} from '../code_executors/built_in_code_executor.js';
 import {createEvent, Event, getFunctionCalls} from '../events/event.js';
 import {createEventActions} from '../events/event_actions.js';
 import {BaseMemoryService} from '../memory/base_memory_service.js';
@@ -94,11 +93,6 @@ export class Runner {
           throw new Error(`CFC is not supported for model: ${
               modelName} in agent: ${this.agent.name}`);
         }
-      }
-
-      if (this.agent instanceof LlmAgent &&
-          !(this.agent.codeExecutor instanceof BuiltInCodeExecutor)) {
-        this.agent.codeExecutor = new BuiltInCodeExecutor();
       }
 
       const invocationContext = new InvocationContext({
