@@ -44,8 +44,8 @@ const PACKAGE_JSON = (agentName: string, language: string) => `
   "description": "",
   "main": "agent.${language}",
   "scripts": {
-    "web": "npx @google/adk-devtools web",
-    "cli": "npx @google/adk-devtools run agent.${language}"
+    "web": "npx @paean-ai/adk-devtools web",
+    "cli": "npx @paean-ai/adk-devtools run agent.${language}"
   },
   "keywords": [],
   "author": "",
@@ -54,7 +54,7 @@ const PACKAGE_JSON = (agentName: string, language: string) => `
 `.trim()
 
 const AGENT_TEMPLATE = (model: string) => `
-import {FunctionTool, LlmAgent} from '@google/adk';
+import {FunctionTool, LlmAgent} from '@paean-ai/adk';
 import {z} from 'zod';
 import dotenv from 'dotenv';
 
@@ -290,7 +290,7 @@ export async function createAgent(options: AgentCreationOptions) {
     await execPromise(`npm install typescript --save-dev`, { cwd: agentDir });
   }
   await execPromise(
-      `npm install @google/adk @google/adk-devtools zod@3.25.76 dotenv`,
+      `npm install @paean-ai/adk @paean-ai/adk-devtools zod@3.25.76 dotenv`,
       {cwd: agentDir});
 
   const files = await listFiles(agentDir);

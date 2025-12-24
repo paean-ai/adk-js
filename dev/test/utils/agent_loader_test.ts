@@ -24,7 +24,7 @@ vi.mock('esbuild', () => ({
                    }));
 
 const agent1JsContent = `
-// represents @google/adk
+// represents @paean-ai/adk
 class BaseAgent {
     constructor() {
         this.name = 'BaseAgent';
@@ -40,7 +40,7 @@ class FakeAgent1 extends BaseAgent {
 exports.rootAgent = new FakeAgent1('agent1');`;
 
 const agent2TsContent = `
-// represents @google/adk
+// represents @paean-ai/adk
 class BaseAgent {
     readonly name: string;
     constructor() {
@@ -57,7 +57,7 @@ export const rootAgent = new FakeAgent2('agent2');`;
 
 const agent2CjsContentMocked = `
 "use strict";
-// represents @google/adk
+// represents @paean-ai/adk
 class BaseAgent {
     constructor() {
         this.name = 'BaseAgent';
@@ -74,7 +74,7 @@ exports.rootAgent = new FakeAgent2('agent2');
 `;
 
 const agent3JsContent = `
-// represents @google/adk
+// represents @paean-ai/adk
 class BaseAgent {
     constructor() {
         this.name = 'BaseAgent';

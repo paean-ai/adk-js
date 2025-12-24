@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {Gemini, GeminiParams} from '@google/adk';
+import {Gemini, GeminiParams} from '@paean-ai/adk';
 
 import {version} from '../../src/version.js';
 

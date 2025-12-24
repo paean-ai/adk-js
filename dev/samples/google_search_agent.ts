@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {GOOGLE_SEARCH, LlmAgent} from '@google/adk';
+import {GOOGLE_SEARCH, LlmAgent} from '@paean-ai/adk';
 
 export const rootAgent = new LlmAgent({
   model: 'gemini-2.5-flash',

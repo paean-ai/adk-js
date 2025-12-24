@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {FunctionTool, ToolContext} from '@google/adk';
+import {FunctionTool, ToolContext} from '@paean-ai/adk';
 import {Type} from '@google/genai';
 import {z} from 'zod';
 

@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {FunctionTool, LlmAgent, LoopAgent} from '@google/adk';
+import {FunctionTool, LlmAgent, LoopAgent} from '@paean-ai/adk';
 import {z} from 'zod';
 
 function getRandomArbitrary(min: number, max: number): number {

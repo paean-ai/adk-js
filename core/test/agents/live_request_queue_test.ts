@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {LiveRequest, LiveRequestQueue} from '@google/adk';
+import {LiveRequest, LiveRequestQueue} from '@paean-ai/adk';
 import {createUserContent} from '@google/genai';
 
 describe('LiveRequestQueue', () => {

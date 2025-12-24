@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseLlm, BaseLlmConnection, isBaseLlm, LlmRequest, LlmResponse} from '@google/adk';
+import {BaseLlm, BaseLlmConnection, isBaseLlm, LlmRequest, LlmResponse} from '@paean-ai/adk';
 
 import {version} from '../../src/version.js';
 

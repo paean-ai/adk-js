@@ -4,45 +4,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {Content, FunctionCall, GenerateContentConfig, Schema, Part} from '@google/genai';
-import {z} from 'zod';
+import { Content, FunctionCall, GenerateContentConfig, Schema, Part } from '@google/genai';
+import { z } from 'zod';
 
-import {BaseCodeExecutor} from '../code_executors/base_code_executor.js';
-import {BuiltInCodeExecutor} from '../code_executors/built_in_code_executor.js';
-import {buildCodeExecutionResultPart, buildExecutableCodePart, CodeExecutionResult, convertCodeExecutionParts, extractCodeAndTruncateContent, File} from '../code_executors/code_execution_utils.js';
-import {CodeExecutorContext} from '../code_executors/code_executor_context.js';
-import {createEvent, createNewEventId, Event, getFunctionCalls, getFunctionResponses, isFinalResponse} from '../events/event.js';
-import {EventActions, createEventActions} from '../events/event_actions.js';
-import {BaseExampleProvider} from '../examples/base_example_provider.js';
-import {Example} from '../examples/example.js';
-import {BaseLlm, isBaseLlm} from '../models/base_llm.js';
-import {appendInstructions, LlmRequest, setOutputSchema} from '../models/llm_request.js';
-import {LlmResponse} from '../models/llm_response.js';
-import {LLMRegistry} from '../models/registry.js';
-import {State} from '../sessions/state';
-import {BaseTool} from '../tools/base_tool.js';
-import {BaseToolset} from '../tools/base_toolset.js';
-import {FunctionTool} from '../tools/function_tool.js';
-import {ToolConfirmation} from '../tools/tool_confirmation.js';
-import {ToolContext} from '../tools/tool_context.js';
-import {deepClone} from '../utils/deep_clone.js';
-import {base64Decode} from '../utils/env_aware_utils.js';
-import {logger} from '../utils/logger.js';
+import { BaseCodeExecutor } from '../code_executors/base_code_executor.js';
+import { BuiltInCodeExecutor } from '../code_executors/built_in_code_executor.js';
+import { buildCodeExecutionResultPart, buildExecutableCodePart, CodeExecutionResult, convertCodeExecutionParts, extractCodeAndTruncateContent, File } from '../code_executors/code_execution_utils.js';
+import { CodeExecutorContext } from '../code_executors/code_executor_context.js';
+import { createEvent, createNewEventId, Event, getFunctionCalls, getFunctionResponses, isFinalResponse } from '../events/event.js';
+import { EventActions, createEventActions } from '../events/event_actions.js';
+import { BaseExampleProvider } from '../examples/base_example_provider.js';
+import { Example } from '../examples/example.js';
+import { BaseLlm, isBaseLlm } from '../models/base_llm.js';
+import { appendInstructions, LlmRequest, setOutputSchema } from '../models/llm_request.js';
+import { LlmResponse } from '../models/llm_response.js';
+import { LLMRegistry } from '../models/registry.js';
+import { State } from '../sessions/state.js';
+import { BaseTool } from '../tools/base_tool.js';
+import { BaseToolset } from '../tools/base_toolset.js';
+import { FunctionTool } from '../tools/function_tool.js';
+import { ToolConfirmation } from '../tools/tool_confirmation.js';
+import { ToolContext } from '../tools/tool_context.js';
+import { deepClone } from '../utils/deep_clone.js';
+import { base64Decode } from '../utils/env_aware_utils.js';
+import { logger } from '../utils/logger.js';
 
-import {BaseAgent, BaseAgentConfig} from './base_agent.js';
-import {BaseLlmRequestProcessor, BaseLlmResponseProcessor} from './base_llm_processor.js';
-import {CallbackContext} from './callback_context.js';
-import {getContents, getCurrentTurnContents} from './content_processor_utils.js';
-import {generateAuthEvent, generateRequestConfirmationEvent, getLongRunningFunctionCalls, handleFunctionCallList, handleFunctionCallsAsync, populateClientFunctionCallId, REQUEST_CONFIRMATION_FUNCTION_CALL_NAME} from './functions.js';
-import {injectSessionState} from './instructions.js';
-import {InvocationContext} from './invocation_context.js';
-import {ReadonlyContext} from './readonly_context.js';
-import {StreamingMode} from './run_config.js';
+import { BaseAgent, BaseAgentConfig } from './base_agent.js';
+import { BaseLlmRequestProcessor, BaseLlmResponseProcessor } from './base_llm_processor.js';
+import { CallbackContext } from './callback_context.js';
+import { getContents, getCurrentTurnContents } from './content_processor_utils.js';
+import { generateAuthEvent, generateRequestConfirmationEvent, getLongRunningFunctionCalls, handleFunctionCallList, handleFunctionCallsAsync, populateClientFunctionCallId, REQUEST_CONFIRMATION_FUNCTION_CALL_NAME } from './functions.js';
+import { injectSessionState } from './instructions.js';
+import { InvocationContext } from './invocation_context.js';
+import { ReadonlyContext } from './readonly_context.js';
+import { StreamingMode } from './run_config.js';
 
 /** An object that can provide an instruction string. */
 export type InstructionProvider = (
-    context: ReadonlyContext,
-    ) => string|Promise<string>;
+  context: ReadonlyContext,
+) => string | Promise<string>;
 
 /**
  * A callback that runs before a request is sent to the model.
@@ -53,8 +53,8 @@ export type InstructionProvider = (
  *     will be skipped and the provided content will be returned to user.
  */
 export type SingleBeforeModelCallback =
-    (params: {context: CallbackContext; request: LlmRequest;}) =>
-        LlmResponse|undefined|Promise<LlmResponse|undefined>;
+  (params: { context: CallbackContext; request: LlmRequest; }) =>
+    LlmResponse | undefined | Promise<LlmResponse | undefined>;
 
 /**
  * A single callback or a list of callbacks.
@@ -63,7 +63,7 @@ export type SingleBeforeModelCallback =
  * order they are listed until a callback does not return None.
  */
 export type BeforeModelCallback =
-    |SingleBeforeModelCallback|SingleBeforeModelCallback[];
+  | SingleBeforeModelCallback | SingleBeforeModelCallback[];
 
 /**
  * A callback that runs after a response is received from the model.
@@ -75,8 +75,8 @@ export type BeforeModelCallback =
  *     user.
  */
 export type SingleAfterModelCallback =
-    (params: {context: CallbackContext; response: LlmResponse;}) =>
-        LlmResponse|undefined|Promise<LlmResponse|undefined>;
+  (params: { context: CallbackContext; response: LlmResponse; }) =>
+    LlmResponse | undefined | Promise<LlmResponse | undefined>;
 
 /**
  * A single callback or a list of callbacks.
@@ -85,7 +85,7 @@ export type SingleAfterModelCallback =
  order they are listed until a callback does not return None.
  */
 export type AfterModelCallback =
-    |SingleAfterModelCallback|SingleAfterModelCallback[];
+  | SingleAfterModelCallback | SingleAfterModelCallback[];
 
 /** A generic dictionary type. */
 export type Dict = {
@@ -102,8 +102,8 @@ export type Dict = {
  *     be used and the framework will skip calling the actual tool.
  */
 export type SingleBeforeToolCallback =
-    (params: {tool: BaseTool; args: Dict; context: ToolContext;}) =>
-        Dict|undefined|Promise<Dict|undefined>;
+  (params: { tool: BaseTool; args: Dict; context: ToolContext; }) =>
+    Dict | undefined | Promise<Dict | undefined>;
 
 /**
  * A single callback or a list of callbacks.
@@ -112,7 +112,7 @@ export type SingleBeforeToolCallback =
  * order they are listed until a callback does not return None.
  */
 export type BeforeToolCallback =
-    |SingleBeforeToolCallback|SingleBeforeToolCallback[];
+  | SingleBeforeToolCallback | SingleBeforeToolCallback[];
 
 /**
  * A callback that runs after a tool is called.
@@ -125,7 +125,7 @@ export type BeforeToolCallback =
  */
 export type SingleAfterToolCallback = (params: {
   tool: BaseTool; args: Dict; context: ToolContext; response: Dict;
-}) => Dict|undefined|Promise<Dict|undefined>;
+}) => Dict | undefined | Promise<Dict | undefined>;
 
 /**
  * A single callback or a list of callbacks.
@@ -134,13 +134,13 @@ export type SingleAfterToolCallback = (params: {
  * order they are listed until acallback does not return None.
  */
 export type AfterToolCallback =
-    |SingleAfterToolCallback|SingleAfterToolCallback[];
+  | SingleAfterToolCallback | SingleAfterToolCallback[];
 
 /** A list of examples or an example provider. */
-export type ExamplesUnion = Example[]|BaseExampleProvider;
+export type ExamplesUnion = Example[] | BaseExampleProvider;
 
 /** A union of tool types that can be provided to an agent. */
-export type ToolUnion = BaseTool|BaseToolset;
+export type ToolUnion = BaseTool | BaseToolset;
 
 const ADK_AGENT_NAME_LABEL_KEY = 'adk_agent_name';
 
@@ -148,10 +148,10 @@ export interface LlmAgentConfig extends BaseAgentConfig {
   /**
    * The model to use for the agent.
    */
-  model?: string|BaseLlm;
+  model?: string | BaseLlm;
 
   /** Instructions for the LLM model, guiding the agent's behavior. */
-  instruction?: string|InstructionProvider;
+  instruction?: string | InstructionProvider;
 
   /**
    * Instructions for all the agents in the entire agent tree.
@@ -161,7 +161,7 @@ export interface LlmAgentConfig extends BaseAgentConfig {
    * For example: use globalInstruction to make all agents have a stable
    * identity or personality.
    */
-  globalInstruction?: string|InstructionProvider;
+  globalInstruction?: string | InstructionProvider;
 
   /** Tools available to this agent. */
   tools?: ToolUnion[];
@@ -199,7 +199,7 @@ export interface LlmAgentConfig extends BaseAgentConfig {
    *   none: Model receives no prior history, operates solely on current
    *   instruction and input
    */
-  includeContents?: 'default'|'none';
+  includeContents?: 'default' | 'none';
 
   /** The input schema when agent is used as a tool. */
   inputSchema?: Schema;
@@ -259,9 +259,9 @@ export interface LlmAgentConfig extends BaseAgentConfig {
 }
 
 async function convertToolUnionToTools(
-    toolUnion: ToolUnion,
-    context?: ReadonlyContext,
-    ): Promise<BaseTool[]> {
+  toolUnion: ToolUnion,
+  context?: ReadonlyContext,
+): Promise<BaseTool[]> {
   if (toolUnion instanceof BaseTool) {
     return [toolUnion];
   }
@@ -273,10 +273,10 @@ async function convertToolUnionToTools(
 // --------------------------------------------------------------------------
 class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
   override async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, void> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, void> {
     const agent = invocationContext.agent;
     if (!(agent instanceof LlmAgent)) {
       return;
@@ -285,26 +285,26 @@ class BasicLlmRequestProcessor extends BaseLlmRequestProcessor {
     // set model string, not model instance.
     llmRequest.model = agent.canonicalModel.model;
 
-    llmRequest.config = {...agent.generateContentConfig ?? {}};
+    llmRequest.config = { ...agent.generateContentConfig ?? {} };
     if (agent.outputSchema) {
       setOutputSchema(llmRequest, agent.outputSchema);
     }
 
     if (invocationContext.runConfig) {
       llmRequest.liveConnectConfig.responseModalities =
-          invocationContext.runConfig.responseModalities;
+        invocationContext.runConfig.responseModalities;
       llmRequest.liveConnectConfig.speechConfig =
-          invocationContext.runConfig.speechConfig;
+        invocationContext.runConfig.speechConfig;
       llmRequest.liveConnectConfig.outputAudioTranscription =
-          invocationContext.runConfig.outputAudioTranscription;
+        invocationContext.runConfig.outputAudioTranscription;
       llmRequest.liveConnectConfig.inputAudioTranscription =
-          invocationContext.runConfig.inputAudioTranscription;
+        invocationContext.runConfig.inputAudioTranscription;
       llmRequest.liveConnectConfig.realtimeInputConfig =
-          invocationContext.runConfig.realtimeInputConfig;
+        invocationContext.runConfig.realtimeInputConfig;
       llmRequest.liveConnectConfig.enableAffectiveDialog =
-          invocationContext.runConfig.enableAffectiveDialog;
+        invocationContext.runConfig.enableAffectiveDialog;
       llmRequest.liveConnectConfig.proactivity =
-          invocationContext.runConfig.proactivity;
+        invocationContext.runConfig.proactivity;
     }
   }
 }
@@ -313,10 +313,10 @@ const BASIC_LLM_REQUEST_PROCESSOR = new BasicLlmRequestProcessor();
 
 class IdentityLlmRequestProcessor extends BaseLlmRequestProcessor {
   override async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, undefined> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, undefined> {
     const agent = invocationContext.agent;
     const si = [`You are an agent. Your internal name is "${agent.name}".`];
     if (agent.description) {
@@ -333,13 +333,13 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
    * Handles instructions and global instructions for LLM flow.
    */
   async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, void> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, void> {
     const agent = invocationContext.agent;
     if (!(agent instanceof LlmAgent) ||
-        !(agent.rootAgent instanceof LlmAgent)) {
+      !(agent.rootAgent instanceof LlmAgent)) {
       return;
     }
     const rootAgent: LlmAgent = agent.rootAgent;
@@ -348,15 +348,15 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
     // Global instruction should be explicitly scoped.
     // Step 1: Appends global instructions if set by RootAgent.
     if (rootAgent instanceof LlmAgent && rootAgent.globalInstruction) {
-      const {instruction, requireStateInjection} =
-          await rootAgent.canonicalGlobalInstruction(
-              new ReadonlyContext(invocationContext),
-          );
+      const { instruction, requireStateInjection } =
+        await rootAgent.canonicalGlobalInstruction(
+          new ReadonlyContext(invocationContext),
+        );
       let instructionWithState = instruction;
       if (requireStateInjection) {
         instructionWithState = await injectSessionState(
-            instruction,
-            new ReadonlyContext(invocationContext),
+          instruction,
+          new ReadonlyContext(invocationContext),
         );
       }
       appendInstructions(llmRequest, [instructionWithState]);
@@ -366,15 +366,15 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
     // TODO - b/425992518: requireStateInjection means user passed a
     // instruction processor. We need to make it more explicit.
     if (agent.instruction) {
-      const {instruction, requireStateInjection} =
-          await agent.canonicalInstruction(
-              new ReadonlyContext(invocationContext),
-          );
+      const { instruction, requireStateInjection } =
+        await agent.canonicalInstruction(
+          new ReadonlyContext(invocationContext),
+        );
       let instructionWithState = instruction;
       if (requireStateInjection) {
         instructionWithState = await injectSessionState(
-            instruction,
-            new ReadonlyContext(invocationContext),
+          instruction,
+          new ReadonlyContext(invocationContext),
         );
       }
       appendInstructions(llmRequest, [instructionWithState]);
@@ -382,13 +382,13 @@ class InstructionsLlmRequestProcessor extends BaseLlmRequestProcessor {
   }
 }
 const INSTRUCTIONS_LLM_REQUEST_PROCESSOR =
-    new InstructionsLlmRequestProcessor();
+  new InstructionsLlmRequestProcessor();
 
 
 class ContentRequestProcessor implements BaseLlmRequestProcessor {
   async *
-      runAsync(invocationContext: InvocationContext, llmRequest: LlmRequest):
-          AsyncGenerator<Event, void, void> {
+    runAsync(invocationContext: InvocationContext, llmRequest: LlmRequest):
+    AsyncGenerator<Event, void, void> {
     const agent = invocationContext.agent;
     if (!agent || !(agent instanceof LlmAgent)) {
       return;
@@ -397,16 +397,16 @@ class ContentRequestProcessor implements BaseLlmRequestProcessor {
     if (agent.includeContents === 'default') {
       // Include full conversation history
       llmRequest.contents = getContents(
-          invocationContext.session.events,
-          agent.name,
-          invocationContext.branch,
+        invocationContext.session.events,
+        agent.name,
+        invocationContext.branch,
       );
     } else {
       // Include current turn context only (no conversation history).
       llmRequest.contents = getCurrentTurnContents(
-          invocationContext.session.events,
-          agent.name,
-          invocationContext.branch,
+        invocationContext.session.events,
+        agent.name,
+        invocationContext.branch,
       );
     }
 
@@ -420,25 +420,25 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
   private readonly tool = new FunctionTool({
     name: this.toolName,
     description:
-        'Transfer the question to another agent. This tool hands off control to another agent when it is more suitable to answer the user question according to the agent description.',
+      'Transfer the question to another agent. This tool hands off control to another agent when it is more suitable to answer the user question according to the agent description.',
     parameters: z.object({
       agentName: z.string().describe('the agent name to transfer to.'),
     }),
     execute:
-        function(args: {agentName: string}, toolContext?: ToolContext) {
-          if (!toolContext) {
-            throw new Error('toolContext is required.');
-          }
-          toolContext.actions.transferToAgent = args.agentName;
-          return 'Transfer queued';
-        },
+      function (args: { agentName: string }, toolContext?: ToolContext) {
+        if (!toolContext) {
+          throw new Error('toolContext is required.');
+        }
+        toolContext.actions.transferToAgent = args.agentName;
+        return 'Transfer queued';
+      },
   });
 
   override async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, void> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, void> {
     if (!(invocationContext.agent instanceof LlmAgent)) {
       return;
     }
@@ -450,13 +450,13 @@ class AgentTransferLlmRequestProcessor extends BaseLlmRequestProcessor {
 
     appendInstructions(llmRequest, [
       this.buildTargetAgentsInstructions(
-          invocationContext.agent,
-          transferTargets,
-          ),
+        invocationContext.agent,
+        transferTargets,
+      ),
     ]);
 
-    const toolContext = new ToolContext({invocationContext});
-    await this.tool.processLlmRequest({toolContext, llmRequest});
+    const toolContext = new ToolContext({ invocationContext });
+    await this.tool.processLlmRequest({ toolContext, llmRequest });
   }
 
   private buildTargetAgentsInfo(targetAgent: BaseAgent): string {
@@ -467,9 +467,9 @@ Agent description: ${targetAgent.description}
   }
 
   private buildTargetAgentsInstructions(
-      agent: LlmAgent,
-      targetAgents: BaseAgent[],
-      ): string {
+    agent: LlmAgent,
+    targetAgents: BaseAgent[],
+  ): string {
     let instructions = `
 You have a list of other agents to transfer to:
 
@@ -508,9 +508,9 @@ to your parent agent.
 
     if (!agent.disallowTransferToPeers) {
       targets.push(
-          ...agent.parentAgent.subAgents.filter(
-              (peerAgent) => peerAgent.name !== agent.name,
-              ),
+        ...agent.parentAgent.subAgents.filter(
+          (peerAgent) => peerAgent.name !== agent.name,
+        ),
       );
     }
 
@@ -518,16 +518,16 @@ to your parent agent.
   }
 }
 const AGENT_TRANSFER_LLM_REQUEST_PROCESSOR =
-    new AgentTransferLlmRequestProcessor();
+  new AgentTransferLlmRequestProcessor();
 
 
 class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
   /** Handles tool confirmation information to build the LLM request. */
   override async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, void> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, void> {
     const agent = invocationContext.agent;
     if (!(agent instanceof LlmAgent)) {
       return;
@@ -538,7 +538,7 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
     }
 
     const requestConfirmationFunctionResponses:
-        {[key: string]: ToolConfirmation} = {};
+      { [key: string]: ToolConfirmation } = {};
 
     let confirmationEventIndex = -1;
     // Step 1: Find the FIRST confirmation event authored by user.
@@ -562,11 +562,11 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
         let toolConfirmation = null;
 
         if (functionResponse.response &&
-            Object.keys(functionResponse.response).length === 1 &&
-            'response' in functionResponse.response) {
+          Object.keys(functionResponse.response).length === 1 &&
+          'response' in functionResponse.response) {
           toolConfirmation =
-              JSON.parse(functionResponse.response['response'] as string) as
-              ToolConfirmation;
+            JSON.parse(functionResponse.response['response'] as string) as
+            ToolConfirmation;
         } else if (functionResponse.response) {
           toolConfirmation = new ToolConfirmation({
             hint: functionResponse.response['hint'] as string,
@@ -577,7 +577,7 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
 
         if (functionResponse.id && toolConfirmation) {
           requestConfirmationFunctionResponses[functionResponse.id] =
-              toolConfirmation;
+            toolConfirmation;
         }
       }
       if (foundConfirmation) {
@@ -600,12 +600,12 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
       }
 
       const toolsToResumeWithConfirmation:
-          {[key: string]: ToolConfirmation} = {};
-      const toolsToResumeWithArgs: {[key: string]: FunctionCall} = {};
+        { [key: string]: ToolConfirmation } = {};
+      const toolsToResumeWithArgs: { [key: string]: FunctionCall } = {};
 
       for (const functionCall of functionCalls) {
         if (!functionCall.id ||
-            !(functionCall.id in requestConfirmationFunctionResponses)) {
+          !(functionCall.id in requestConfirmationFunctionResponses)) {
           continue;
         }
 
@@ -614,11 +614,11 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
           continue;
         }
         const originalFunctionCall =
-            args['originalFunctionCall'] as FunctionCall;
+          args['originalFunctionCall'] as FunctionCall;
 
         if (originalFunctionCall.id) {
           toolsToResumeWithConfirmation[originalFunctionCall.id] =
-              requestConfirmationFunctionResponses[functionCall.id];
+            requestConfirmationFunctionResponses[functionCall.id];
           toolsToResumeWithArgs[originalFunctionCall.id] = originalFunctionCall;
         }
       }
@@ -650,9 +650,9 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
       }
 
       const toolsList =
-          await agent.canonicalTools(new ReadonlyContext(invocationContext));
+        await agent.canonicalTools(new ReadonlyContext(invocationContext));
       const toolsDict =
-          Object.fromEntries(toolsList.map((tool) => [tool.name, tool]));
+        Object.fromEntries(toolsList.map((tool) => [tool.name, tool]));
 
       const functionResponseEvent = await handleFunctionCallList({
         invocationContext: invocationContext,
@@ -673,7 +673,7 @@ class RequestConfirmationLlmRequestProcessor extends BaseLlmRequestProcessor {
 }
 
 export const REQUEST_CONFIRMATION_LLM_REQUEST_PROCESSOR =
-    new RequestConfirmationLlmRequestProcessor();
+  new RequestConfirmationLlmRequestProcessor();
 
 
 /**
@@ -681,10 +681,10 @@ export const REQUEST_CONFIRMATION_LLM_REQUEST_PROCESSOR =
  */
 class CodeExecutionRequestProcessor extends BaseLlmRequestProcessor {
   override async *
-      runAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          ): AsyncGenerator<Event, void, void> {
+    runAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+    ): AsyncGenerator<Event, void, void> {
     if (!(invocationContext.agent instanceof LlmAgent)) {
       return;
     }
@@ -703,14 +703,14 @@ class CodeExecutionRequestProcessor extends BaseLlmRequestProcessor {
 
     for (const content of llmRequest.contents) {
       const delimeters: [string, string] =
-          invocationContext.agent.codeExecutor.codeBlockDelimiters.length ?
+        invocationContext.agent.codeExecutor.codeBlockDelimiters.length ?
           invocationContext.agent.codeExecutor.codeBlockDelimiters[0] :
           ['', ''];
 
       const codeExecutionParts = convertCodeExecutionParts(
-          content,
-          delimeters,
-          invocationContext.agent.codeExecutor.executionResultDelimiters,
+        content,
+        delimeters,
+        invocationContext.agent.codeExecutor.executionResultDelimiters,
       );
     }
   }
@@ -719,7 +719,7 @@ class CodeExecutionRequestProcessor extends BaseLlmRequestProcessor {
 /**
  * Map of MIME types to data file utilities
  */
-const DATA_FILE_UTIL_MAP: Record < string, {
+const DATA_FILE_UTIL_MAP: Record<string, {
   extension: string;
   loaderCodeTemplate: string;
 }
@@ -784,8 +784,8 @@ class CodeExecutionResponseProcessor implements BaseLlmResponseProcessor {
    * @returns An async generator yielding events
    */
   async *
-      runAsync(invocationContext: InvocationContext, llmResponse: LlmResponse):
-          AsyncGenerator<Event, void, unknown> {
+    runAsync(invocationContext: InvocationContext, llmResponse: LlmResponse):
+    AsyncGenerator<Event, void, unknown> {
     // Skip if the response is partial (streaming)
     if (llmResponse.partial) {
       return;
@@ -793,7 +793,7 @@ class CodeExecutionResponseProcessor implements BaseLlmResponseProcessor {
 
     // Run the post-processor with standard generator approach
     for await (
-        const event of runPostProcessor(invocationContext, llmResponse)) {
+      const event of runPostProcessor(invocationContext, llmResponse)) {
       yield event;
     }
   }
@@ -813,10 +813,10 @@ export const responseProcessor = new CodeExecutionResponseProcessor();
  * @returns An async generator yielding events
  */
 async function*
-    runPreProcessor(
-        invocationContext: InvocationContext,
-        llmRequest: LlmRequest,
-        ): AsyncGenerator<Event, void, unknown> {
+  runPreProcessor(
+    invocationContext: InvocationContext,
+    llmRequest: LlmRequest,
+  ): AsyncGenerator<Event, void, unknown> {
   const agent = invocationContext.agent;
 
   if (!(agent instanceof LlmAgent)) {
@@ -839,11 +839,11 @@ async function*
   }
 
   const codeExecutorContext =
-      new CodeExecutorContext(new State(invocationContext.session.state));
+    new CodeExecutorContext(new State(invocationContext.session.state));
 
   // Skip if the error count exceeds the max retry attempts
   if (codeExecutorContext.getErrorCount(invocationContext.invocationId) >=
-      codeExecutor.errorRetryAttempts) {
+    codeExecutor.errorRetryAttempts) {
     return;
   }
 
@@ -851,15 +851,15 @@ async function*
   // memory Meanwhile, mutate the inline data file to text part in session
   // history from all turns
   const allInputFiles =
-      extractAndReplaceInlineFiles(codeExecutorContext, llmRequest);
+    extractAndReplaceInlineFiles(codeExecutorContext, llmRequest);
 
   // [Step 2] Run explore_df code on the data files from the current turn
   // We only need to explore the new data files because the previous data files
   // should already be explored and cached in the code execution runtime
   const processedFileNames =
-      new Set(codeExecutorContext.getProcessedFileNames());
+    new Set(codeExecutorContext.getProcessedFileNames());
   const filesToProcess =
-      allInputFiles.filter(f => !processedFileNames.has(f.name));
+    allInputFiles.filter(f => !processedFileNames.has(f.name));
 
   for (const file of filesToProcess) {
     const codeStr = getDataFilePreprocessingCode(file);
@@ -873,7 +873,7 @@ async function*
     const codeContent: Content = {
       role: 'model',
       parts: [
-        {text: `Processing input file: \`${file.name}\``},
+        { text: `Processing input file: \`${file.name}\`` },
         buildExecutableCodePart(codeStr)
       ]
     };
@@ -888,7 +888,7 @@ async function*
     });
 
     const executionId =
-        getOrSetExecutionId(invocationContext, codeExecutorContext);
+      getOrSetExecutionId(invocationContext, codeExecutorContext);
     const codeExecutionResult = await codeExecutor.executeCode({
       invocationContext,
       codeExecutionInput: {
@@ -910,9 +910,9 @@ async function*
 
     // Emit the execution result, and add it to the LLM request
     const executionResultEvent = await postProcessCodeExecutionResult(
-        invocationContext,
-        codeExecutorContext,
-        codeExecutionResult,
+      invocationContext,
+      codeExecutorContext,
+      codeExecutionResult,
     );
 
     yield executionResultEvent;
@@ -929,10 +929,10 @@ async function*
  * @returns An async generator yielding events
  */
 async function*
-    runPostProcessor(
-        invocationContext: InvocationContext,
-        llmResponse: LlmResponse,
-        ): AsyncGenerator<Event, void, unknown> {
+  runPostProcessor(
+    invocationContext: InvocationContext,
+    llmResponse: LlmResponse,
+  ): AsyncGenerator<Event, void, unknown> {
   const agent = invocationContext.agent;
 
   if (!(agent instanceof LlmAgent)) {
@@ -954,11 +954,11 @@ async function*
   }
 
   const codeExecutorContext =
-      new CodeExecutorContext(new State(invocationContext.session.state));
+    new CodeExecutorContext(new State(invocationContext.session.state));
 
   // Skip if the error count exceeds the max retry attempts
   if (codeExecutorContext.getErrorCount(invocationContext.invocationId) >=
-      codeExecutor.errorRetryAttempts) {
+    codeExecutor.errorRetryAttempts) {
     return;
   }
 
@@ -966,7 +966,7 @@ async function*
   // content to the part with the first code block
   const responseContent = llmResponse.content;
   const codeStr = extractCodeAndTruncateContent(
-      responseContent, codeExecutor.codeBlockDelimiters);
+    responseContent, codeExecutor.codeBlockDelimiters);
 
   // Terminal state: no code to execute
   if (!codeStr) {
@@ -982,7 +982,7 @@ async function*
   });
 
   const executionId =
-      getOrSetExecutionId(invocationContext, codeExecutorContext);
+    getOrSetExecutionId(invocationContext, codeExecutorContext);
   const codeExecutionResult = await codeExecutor.executeCode({
     invocationContext,
     codeExecutionInput: {
@@ -1000,9 +1000,9 @@ async function*
   });
 
   yield await postProcessCodeExecutionResult(
-      invocationContext,
-      codeExecutorContext,
-      codeExecutionResult,
+    invocationContext,
+    codeExecutorContext,
+    codeExecutionResult,
   );
 
   // [Step 3] Skip processing the original model response
@@ -1018,7 +1018,7 @@ async function*
  * @returns A list of input files
  */
 function extractAndReplaceInlineFiles(
-    codeExecutorContext: CodeExecutorContext, llmRequest: LlmRequest): File[] {
+  codeExecutorContext: CodeExecutorContext, llmRequest: LlmRequest): File[] {
   const allInputFiles = codeExecutorContext.getInputFiles();
   const savedFileNames = new Set(allInputFiles.map(f => f.name));
 
@@ -1042,7 +1042,7 @@ function extractAndReplaceInlineFiles(
 
       // Replace the inline data file with a file name placeholder
       const fileName =
-          `data_${i + 1}_${j + 1}${DATA_FILE_UTIL_MAP[mimeType].extension}`;
+        `data_${i + 1}_${j + 1}${DATA_FILE_UTIL_MAP[mimeType].extension}`;
 
       part.text = `\nAvailable file: \`${fileName}\`\n`;
 
@@ -1071,8 +1071,8 @@ function extractAndReplaceInlineFiles(
  * @returns The execution ID or undefined if not stateful
  */
 function getOrSetExecutionId(
-    invocationContext: InvocationContext,
-    codeExecutorContext: CodeExecutorContext): string|undefined {
+  invocationContext: InvocationContext,
+  codeExecutorContext: CodeExecutorContext): string | undefined {
   const agent = invocationContext.agent;
 
   if (!(agent instanceof LlmAgent) || !agent.codeExecutor?.stateful) {
@@ -1098,9 +1098,9 @@ function getOrSetExecutionId(
  * @returns The event with the code execution result
  */
 async function postProcessCodeExecutionResult(
-    invocationContext: InvocationContext,
-    codeExecutorContext: CodeExecutorContext,
-    codeExecutionResult: CodeExecutionResult): Promise<Event> {
+  invocationContext: InvocationContext,
+  codeExecutorContext: CodeExecutorContext,
+  codeExecutionResult: CodeExecutionResult): Promise<Event> {
   if (!invocationContext.artifactService) {
     throw new Error('Artifact service is not initialized.');
   }
@@ -1111,7 +1111,7 @@ async function postProcessCodeExecutionResult(
   };
 
   const eventActions =
-      createEventActions({stateDelta: codeExecutorContext.getStateDelta()});
+    createEventActions({ stateDelta: codeExecutorContext.getStateDelta() });
 
   // Handle code execution error retry
   if (codeExecutionResult.stderr) {
@@ -1128,7 +1128,7 @@ async function postProcessCodeExecutionResult(
       sessionId: invocationContext.session.id,
       filename: outputFile.name,
       artifact: {
-        inlineData: {data: outputFile.content, mimeType: outputFile.mimeType}
+        inlineData: { data: outputFile.content, mimeType: outputFile.mimeType }
       },
     });
 
@@ -1150,7 +1150,7 @@ async function postProcessCodeExecutionResult(
  * @param file The file to explore
  * @returns The code to explore the data file or undefined if not supported
  */
-function getDataFilePreprocessingCode(file: File): string|undefined {
+function getDataFilePreprocessingCode(file: File): string | undefined {
   /**
    * Gets a normalized file name.
    *
@@ -1177,8 +1177,8 @@ function getDataFilePreprocessingCode(file: File): string|undefined {
 
   const varName = getNormalizedFileName(file.name);
   const loaderCode =
-      DATA_FILE_UTIL_MAP[file.mimeType].loaderCodeTemplate.replace(
-          '{filename}', file.name);
+    DATA_FILE_UTIL_MAP[file.mimeType].loaderCodeTemplate.replace(
+      '{filename}', file.name);
 
   return `
 ${DATA_FILE_HELPER_LIB}
@@ -1201,14 +1201,14 @@ const CODE_EXECUTION_REQUEST_PROCESSOR = new CodeExecutionRequestProcessor();
  * An agent that uses a large language model to generate responses.
  */
 export class LlmAgent extends BaseAgent {
-  model?: string|BaseLlm;
-  instruction: string|InstructionProvider;
-  globalInstruction: string|InstructionProvider;
+  model?: string | BaseLlm;
+  instruction: string | InstructionProvider;
+  globalInstruction: string | InstructionProvider;
   tools: ToolUnion[];
   generateContentConfig?: GenerateContentConfig;
   disallowTransferToParent: boolean;
   disallowTransferToPeers: boolean;
-  includeContents: 'default'|'none';
+  includeContents: 'default' | 'none';
   inputSchema?: Schema;
   outputSchema?: Schema;
   outputKey?: string;
@@ -1253,7 +1253,7 @@ export class LlmAgent extends BaseAgent {
 
     // Preserve the agent transfer behavior.
     const agentTransferDisabled = this.disallowTransferToParent &&
-        this.disallowTransferToPeers && !this.subAgents?.length;
+      this.disallowTransferToPeers && !this.subAgents?.length;
     if (!agentTransferDisabled) {
       this.requestProcessors.push(AGENT_TRANSFER_LLM_REQUEST_PROCESSOR);
     }
@@ -1265,12 +1265,12 @@ export class LlmAgent extends BaseAgent {
       }
       if (config.generateContentConfig.systemInstruction) {
         throw new Error(
-            'System instruction must be set via LlmAgent.instruction.',
+          'System instruction must be set via LlmAgent.instruction.',
         );
       }
       if (config.generateContentConfig.responseSchema) {
         throw new Error(
-            'Response schema must be set via LlmAgent.output_schema.');
+          'Response schema must be set via LlmAgent.output_schema.');
       }
     } else {
       this.generateContentConfig = {}
@@ -1280,8 +1280,7 @@ export class LlmAgent extends BaseAgent {
     if (this.outputSchema) {
       if (!this.disallowTransferToParent || !this.disallowTransferToPeers) {
         logger.warn(
-            `Invalid config for agent ${
-                this.name}: outputSchema cannot co-exist with agent transfer configurations. Setting disallowTransferToParent=true, disallowTransferToPeers=true`,
+          `Invalid config for agent ${this.name}: outputSchema cannot co-exist with agent transfer configurations. Setting disallowTransferToParent=true, disallowTransferToPeers=true`,
         );
         this.disallowTransferToParent = true;
         this.disallowTransferToPeers = true;
@@ -1289,15 +1288,13 @@ export class LlmAgent extends BaseAgent {
 
       if (this.subAgents && this.subAgents.length > 0) {
         throw new Error(
-            `Invalid config for agent ${
-                this.name}: if outputSchema is set, subAgents must be empty to disable agent transfer.`,
+          `Invalid config for agent ${this.name}: if outputSchema is set, subAgents must be empty to disable agent transfer.`,
         );
       }
 
       if (this.tools && this.tools.length > 0) {
         throw new Error(
-            `Invalid config for agent ${
-                this.name}: if outputSchema is set, tools must be empty`,
+          `Invalid config for agent ${this.name}: if outputSchema is set, tools must be empty`,
         );
       }
     }
@@ -1336,9 +1333,9 @@ export class LlmAgent extends BaseAgent {
    * @returns The resolved self.instruction field.
    */
   async canonicalInstruction(context: ReadonlyContext):
-      Promise<{instruction: string, requireStateInjection: boolean}> {
+    Promise<{ instruction: string, requireStateInjection: boolean }> {
     if (typeof this.instruction === 'string') {
-      return {instruction: this.instruction, requireStateInjection: true};
+      return { instruction: this.instruction, requireStateInjection: true };
     }
     return {
       instruction: await this.instruction(context),
@@ -1354,9 +1351,9 @@ export class LlmAgent extends BaseAgent {
    * @returns The resolved self.global_instruction field.
    */
   async canonicalGlobalInstruction(context: ReadonlyContext):
-      Promise<{instruction: string, requireStateInjection: boolean}> {
+    Promise<{ instruction: string, requireStateInjection: boolean }> {
     if (typeof this.globalInstruction === 'string') {
-      return {instruction: this.globalInstruction, requireStateInjection: true};
+      return { instruction: this.globalInstruction, requireStateInjection: true };
     }
     return {
       instruction: await this.globalInstruction(context),
@@ -1384,7 +1381,7 @@ export class LlmAgent extends BaseAgent {
    * @param callback The callback or an array of callbacks.
    * @returns An array of callbacks.
    */
-  private static normalizeCallbackArray<T>(callback?: T|T[]): T[] {
+  private static normalizeCallbackArray<T>(callback?: T | T[]): T[] {
     if (!callback) {
       return [];
     }
@@ -1445,34 +1442,32 @@ export class LlmAgent extends BaseAgent {
   private maybeSaveOutputToState(event: Event) {
     if (event.author !== this.name) {
       logger.debug(
-          `Skipping output save for agent ${this.name}: event authored by ${
-              event.author}`,
+        `Skipping output save for agent ${this.name}: event authored by ${event.author}`,
       );
       return;
     }
     if (!this.outputKey) {
       logger.debug(
-          `Skipping output save for agent ${this.name}: outputKey is not set`,
+        `Skipping output save for agent ${this.name}: outputKey is not set`,
       );
       return;
     }
     if (!isFinalResponse(event)) {
       logger.debug(
-          `Skipping output save for agent ${
-              this.name}: event is not a final response`,
+        `Skipping output save for agent ${this.name}: event is not a final response`,
       );
       return;
     }
     if (!event.content?.parts?.length) {
       logger.debug(
-          `Skipping output save for agent ${this.name}: event content is empty`,
+        `Skipping output save for agent ${this.name}: event content is empty`,
       );
       return;
     }
 
     const resultStr: string =
-        event.content.parts.map((part) => (part.text ? part.text : ''))
-            .join('');
+      event.content.parts.map((part) => (part.text ? part.text : ''))
+        .join('');
     let result: unknown = resultStr;
     if (this.outputSchema) {
       // If the result from the final chunk is just whitespace or empty,
@@ -1493,11 +1488,11 @@ export class LlmAgent extends BaseAgent {
   }
 
   protected async *
-      runAsyncImpl(
-          context: InvocationContext,
-          ): AsyncGenerator<Event, void, void> {
+    runAsyncImpl(
+      context: InvocationContext,
+    ): AsyncGenerator<Event, void, void> {
     while (true) {
-      let lastEvent: Event|undefined = undefined;
+      let lastEvent: Event | undefined = undefined;
       for await (const event of this.runOneStepAsync(context)) {
         lastEvent = event;
         this.maybeSaveOutputToState(event);
@@ -1515,9 +1510,9 @@ export class LlmAgent extends BaseAgent {
   }
 
   protected async *
-      runLiveImpl(
-          context: InvocationContext,
-          ): AsyncGenerator<Event, void, void> {
+    runLiveImpl(
+      context: InvocationContext,
+    ): AsyncGenerator<Event, void, void> {
     for await (const event of this.runLiveFlow(context)) {
       this.maybeSaveOutputToState(event);
       yield event;
@@ -1531,18 +1526,18 @@ export class LlmAgent extends BaseAgent {
   // #START LlmFlow Logic
   // --------------------------------------------------------------------------
   private async *
-      runLiveFlow(
-          invocationContext: InvocationContext,
-          ): AsyncGenerator<Event, void, void> {
+    runLiveFlow(
+      invocationContext: InvocationContext,
+    ): AsyncGenerator<Event, void, void> {
     // TODO - b/425992518: remove dummy logic, implement this.
     await Promise.resolve();
     throw new Error('LlmAgent.runLiveFlow not implemented');
   }
 
   private async *
-      runOneStepAsync(
-          invocationContext: InvocationContext,
-          ): AsyncGenerator<Event, void, void> {
+    runOneStepAsync(
+      invocationContext: InvocationContext,
+    ): AsyncGenerator<Event, void, void> {
     const llmRequest: LlmRequest = {
       contents: [],
       toolsDict: {},
@@ -1555,20 +1550,20 @@ export class LlmAgent extends BaseAgent {
     // Runs request processors.
     for (const processor of this.requestProcessors) {
       for await (
-          const event of processor.runAsync(invocationContext, llmRequest)) {
+        const event of processor.runAsync(invocationContext, llmRequest)) {
         yield event;
       }
     }
     // TODO - b/425992518: check if tool preprocessors can be simplified.
     // Run pre-processors for tools.
     for (const toolUnion of this.tools) {
-      const toolContext = new ToolContext({invocationContext});
+      const toolContext = new ToolContext({ invocationContext });
 
       // process all tools from this tool union
       const tools = await convertToolUnionToTools(
-          toolUnion, new ReadonlyContext(invocationContext));
+        toolUnion, new ReadonlyContext(invocationContext));
       for (const tool of tools) {
-        await tool.processLlmRequest({toolContext, llmRequest});
+        await tool.processLlmRequest({ toolContext, llmRequest });
       }
     }
     // =========================================================================
@@ -1589,12 +1584,12 @@ export class LlmAgent extends BaseAgent {
       branch: invocationContext.branch,
     });
     for await (const llmResponse of this.callLlmAsync(
-        invocationContext, llmRequest, modelResponseEvent)) {
+      invocationContext, llmRequest, modelResponseEvent)) {
       // ======================================================================
       // Postprocess after calling the LLM
       // ======================================================================
       for await (const event of this.postprocess(
-          invocationContext, llmRequest, llmResponse, modelResponseEvent)) {
+        invocationContext, llmRequest, llmResponse, modelResponseEvent)) {
         // Update the mutable event id to avoid conflict
         modelResponseEvent.id = createNewEventId();
         modelResponseEvent.timestamp = new Date().getTime();
@@ -1604,18 +1599,18 @@ export class LlmAgent extends BaseAgent {
   }
 
   private async *
-      postprocess(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          llmResponse: LlmResponse,
-          modelResponseEvent: Event,
-          ): AsyncGenerator<Event, void, void> {
+    postprocess(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+      llmResponse: LlmResponse,
+      modelResponseEvent: Event,
+    ): AsyncGenerator<Event, void, void> {
     // =========================================================================
     // Runs response processors
     // =========================================================================
     for (const processor of this.responseProcessors) {
       for await (
-          const event of processor.runAsync(invocationContext, llmResponse)) {
+        const event of processor.runAsync(invocationContext, llmResponse)) {
         yield event;
       }
     }
@@ -1625,7 +1620,7 @@ export class LlmAgent extends BaseAgent {
     // =========================================================================
     // If no model response, skip.
     if (!llmResponse.content && !llmResponse.errorCode &&
-        !llmResponse.interrupted) {
+      !llmResponse.interrupted) {
       return;
     }
 
@@ -1643,7 +1638,7 @@ export class LlmAgent extends BaseAgent {
         // TODO - b/425992518: hacky, transaction log, simplify.
         // Long running is a property of tool in registry.
         mergedEvent.longRunningToolIds = Array.from(
-            getLongRunningFunctionCalls(functionCalls, llmRequest.toolsDict));
+          getLongRunningFunctionCalls(functionCalls, llmRequest.toolsDict));
       }
     }
     yield mergedEvent;
@@ -1673,7 +1668,7 @@ export class LlmAgent extends BaseAgent {
     // Yiels an authentication event if any.
     // TODO - b/425992518: transaction log session, simplify.
     const authEvent =
-        generateAuthEvent(invocationContext, functionResponseEvent);
+      generateAuthEvent(invocationContext, functionResponseEvent);
     if (authEvent) {
       yield authEvent;
     }
@@ -1714,9 +1709,9 @@ export class LlmAgent extends BaseAgent {
    * @throws Error if the agent is not found.
    */
   private getAgentByName(
-      invocationContext: InvocationContext,
-      agentName: string,
-      ): BaseAgent {
+    invocationContext: InvocationContext,
+    agentName: string,
+  ): BaseAgent {
     const rootAgent = invocationContext.agent.rootAgent;
     const agentToRun = rootAgent.findAgent(agentName);
     if (!agentToRun) {
@@ -1726,14 +1721,14 @@ export class LlmAgent extends BaseAgent {
   }
 
   private async *
-      callLlmAsync(
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          modelResponseEvent: Event,
-          ): AsyncGenerator<LlmResponse, void, void> {
+    callLlmAsync(
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+      modelResponseEvent: Event,
+    ): AsyncGenerator<LlmResponse, void, void> {
     // Runs before_model_callback if it exists.
     const beforeModelResponse = await this.handleBeforeModelCallback(
-        invocationContext, llmRequest, modelResponseEvent);
+      invocationContext, llmRequest, modelResponseEvent);
     if (beforeModelResponse) {
       yield beforeModelResponse;
       return;
@@ -1759,38 +1754,38 @@ export class LlmAgent extends BaseAgent {
     } else {
       invocationContext.incrementLlmCallCount();
       const responsesGenerator = llm.generateContentAsync(
-          llmRequest,
+        llmRequest,
           /* stream= */ invocationContext.runConfig?.streamingMode ===
-              StreamingMode.SSE,
+        StreamingMode.SSE,
       );
 
       for await (const llmResponse of this.runAndHandleError(
-          responsesGenerator, invocationContext, llmRequest,
-          modelResponseEvent)) {
+        responsesGenerator, invocationContext, llmRequest,
+        modelResponseEvent)) {
         // TODO - b/436079721: Add trace_call_llm
 
         // Runs after_model_callback if it exists.
         const alteredLlmResponse = await this.handleAfterModelCallback(
-            invocationContext, llmResponse, modelResponseEvent);
+          invocationContext, llmResponse, modelResponseEvent);
         yield alteredLlmResponse ?? llmResponse;
       }
     }
   }
 
   private async handleBeforeModelCallback(
-      invocationContext: InvocationContext,
-      llmRequest: LlmRequest,
-      modelResponseEvent: Event,
-      ): Promise<LlmResponse|undefined> {
+    invocationContext: InvocationContext,
+    llmRequest: LlmRequest,
+    modelResponseEvent: Event,
+  ): Promise<LlmResponse | undefined> {
     // TODO - b/425992518: Clean up eventActions from CallbackContext here as
     // modelResponseEvent.actions is always empty.
     const callbackContext = new CallbackContext(
-        {invocationContext, eventActions: modelResponseEvent.actions});
+      { invocationContext, eventActions: modelResponseEvent.actions });
 
     // Plugin callbacks before canonical callbacks
     const beforeModelCallbackResponse =
-        await invocationContext.pluginManager.runBeforeModelCallback(
-            {callbackContext, llmRequest});
+      await invocationContext.pluginManager.runBeforeModelCallback(
+        { callbackContext, llmRequest });
     if (beforeModelCallbackResponse) {
       return beforeModelCallbackResponse;
     }
@@ -1798,7 +1793,7 @@ export class LlmAgent extends BaseAgent {
     // If no override was returned from the plugins, run the canonical callbacks
     for (const callback of this.canonicalBeforeModelCallbacks) {
       const callbackResponse =
-          await callback({context: callbackContext, request: llmRequest});
+        await callback({ context: callbackContext, request: llmRequest });
       if (callbackResponse) {
         return callbackResponse;
       }
@@ -1807,17 +1802,17 @@ export class LlmAgent extends BaseAgent {
   }
 
   private async handleAfterModelCallback(
-      invocationContext: InvocationContext,
-      llmResponse: LlmResponse,
-      modelResponseEvent: Event,
-      ): Promise<LlmResponse|undefined> {
+    invocationContext: InvocationContext,
+    llmResponse: LlmResponse,
+    modelResponseEvent: Event,
+  ): Promise<LlmResponse | undefined> {
     const callbackContext = new CallbackContext(
-        {invocationContext, eventActions: modelResponseEvent.actions});
+      { invocationContext, eventActions: modelResponseEvent.actions });
 
     // Plugin callbacks before canonical callbacks
     const afterModelCallbackResponse =
-        await invocationContext.pluginManager.runAfterModelCallback(
-            {callbackContext, llmResponse});
+      await invocationContext.pluginManager.runAfterModelCallback(
+        { callbackContext, llmResponse });
     if (afterModelCallbackResponse) {
       return afterModelCallbackResponse;
     }
@@ -1825,7 +1820,7 @@ export class LlmAgent extends BaseAgent {
     // If no override was returned from the plugins, run the canonical callbacks
     for (const callback of this.canonicalAfterModelCallbacks) {
       const callbackResponse =
-          await callback({context: callbackContext, response: llmResponse});
+        await callback({ context: callbackContext, response: llmResponse });
       if (callbackResponse) {
         return callbackResponse;
       }
@@ -1834,12 +1829,12 @@ export class LlmAgent extends BaseAgent {
   }
 
   private async *
-      runAndHandleError(
-          responseGenerator: AsyncGenerator<LlmResponse, void, void>,
-          invocationContext: InvocationContext,
-          llmRequest: LlmRequest,
-          modelResponseEvent: Event,
-          ): AsyncGenerator<LlmResponse, void, void> {
+    runAndHandleError(
+      responseGenerator: AsyncGenerator<LlmResponse, void, void>,
+      invocationContext: InvocationContext,
+      llmRequest: LlmRequest,
+      modelResponseEvent: Event,
+    ): AsyncGenerator<LlmResponse, void, void> {
     try {
       for await (const response of responseGenerator) {
         yield response;
@@ -1848,24 +1843,24 @@ export class LlmAgent extends BaseAgent {
       // Return an LlmResponse with error details.
       // Note: this will cause agent to work better if there's a loop.
       const callbackContext = new CallbackContext(
-          {invocationContext, eventActions: modelResponseEvent.actions});
+        { invocationContext, eventActions: modelResponseEvent.actions });
 
       // Wrapped LLM should throw Error-typed errors
       if (modelError instanceof Error) {
         // Try plugins to recover from the error
         const onModelErrorCallbackResponse =
-            await invocationContext.pluginManager.runOnModelErrorCallback({
-              callbackContext: callbackContext,
-              llmRequest: llmRequest,
-              error: modelError as Error
-            });
+          await invocationContext.pluginManager.runOnModelErrorCallback({
+            callbackContext: callbackContext,
+            llmRequest: llmRequest,
+            error: modelError as Error
+          });
 
         if (onModelErrorCallbackResponse) {
           yield onModelErrorCallbackResponse;
         } else {
           // If no plugins, just return the message.
           const errorResponse = JSON.parse(modelError.message) as
-              {error: {code: number; message: string;}};
+            { error: { code: number; message: string; } };
 
           yield {
             errorCode: String(errorResponse.error.code),

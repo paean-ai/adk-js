@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseAgent, BasePlugin, BaseTool, CallbackContext, Event, InvocationContext, LlmRequest, LlmResponse, PluginManager, ToolContext,} from '@google/adk';
+import {BaseAgent, BasePlugin, BaseTool, CallbackContext, Event, InvocationContext, LlmRequest, LlmResponse, PluginManager, ToolContext,} from '@paean-ai/adk';
 import {Content} from '@google/genai';
 
 type PluginCallbackName = keyof BasePlugin;

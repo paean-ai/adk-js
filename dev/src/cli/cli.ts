@@ -9,7 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import dotenv from 'dotenv';
 import {Command, Argument, Option} from 'commander';
-import {LogLevel, setLogLevel, BaseArtifactService, GcsArtifactService} from '@google/adk';
+import {LogLevel, setLogLevel, BaseArtifactService, GcsArtifactService} from '@paean-ai/adk';
 import {AdkWebServer} from '../server/adk_web_server.js';
 import {runAgent} from './cli_run.js';
 import {deployToCloudRun} from './cli_deploy.js';

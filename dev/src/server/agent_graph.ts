@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {AgentTool, BaseAgent, BaseTool, FunctionTool, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent} from '@google/adk';
+import {AgentTool, BaseAgent, BaseTool, FunctionTool, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent} from '@paean-ai/adk';
 import {Digraph, Edge, Node, RootGraph, Subgraph, toDot} from 'ts-graphviz';
 
 const DARK_GREEN = '#0F5223';

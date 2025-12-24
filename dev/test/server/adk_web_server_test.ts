@@ -1,4 +1,4 @@
-import {BaseAgent, BaseArtifactService, BaseMemoryService, BaseSessionService, createEvent, Event, InMemoryArtifactService, InMemoryMemoryService, InMemorySessionService, InvocationContext} from '@google/adk';
+import {BaseAgent, BaseArtifactService, BaseMemoryService, BaseSessionService, createEvent, Event, InMemoryArtifactService, InMemoryMemoryService, InMemorySessionService, InvocationContext} from '@paean-ai/adk';
 import type {Application, Request, Response} from 'express';
 import {beforeEach, describe, expect, it} from 'vitest';
 

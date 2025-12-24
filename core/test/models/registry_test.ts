@@ -1,4 +1,4 @@
-import {BaseLlm, BaseLlmConnection, LlmAgent, LLMRegistry, LlmRequest, LlmResponse} from '@google/adk';
+import {BaseLlm, BaseLlmConnection, LlmAgent, LLMRegistry, LlmRequest, LlmResponse} from '@paean-ai/adk';
 import {Blob, Content, createModelContent, GenerateContentResponse} from '@google/genai';
 
 class TestLlmConnection implements BaseLlmConnection {

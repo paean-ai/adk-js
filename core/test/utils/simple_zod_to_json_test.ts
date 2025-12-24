@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {zodObjectToSchema} from '@google/adk';
+import {zodObjectToSchema} from '@paean-ai/adk';
 import {Type} from '@google/genai';
 import {z} from 'zod';
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseAgent, BasePlugin, createEvent, createSession, Event, InMemoryArtifactService, InMemorySessionService, InvocationContext, LlmAgent, Runner} from '@google/adk';
+import {BaseAgent, BasePlugin, createEvent, createSession, Event, InMemoryArtifactService, InMemorySessionService, InvocationContext, LlmAgent, Runner} from '@paean-ai/adk';
 import {Content, FunctionCall, FunctionResponse, Part} from '@google/genai';
 
 const TEST_APP_ID = 'test_app_id';

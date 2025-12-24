@@ -15,7 +15,7 @@ import {isFile, isFolderExists, loadFileData, saveToFile, tryToFindFileRecursive
 const execAsync = promisify(exec);
 const spawnAsync = promisify(spawn);
 
-const REQUIRED_NPM_PACKAGES = ['@google/adk'];
+const REQUIRED_NPM_PACKAGES = ['@paean-ai/adk'];
 
 export interface CreateDockerFileContentOptions {
   appName?: string;
@@ -199,7 +199,7 @@ COPY --chown=myuser:myuser "node_modules" "/app/node_modules"
 # Copy application files
 
 # Install Agent Deps - Start
-RUN npm install @google/adk-devtools@latest
+RUN npm install @paean-ai/adk-devtools@latest
 RUN npm install --production
 # Install Agent Deps - End
 

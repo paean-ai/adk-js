@@ -26,8 +26,8 @@ import {MCPTool} from './mcp_tool.js';
  * of the tools provided by the MCP server.
  *
  * Usage:
- *   import { MCPToolset } from '@google/adk';
- *   import { StreamableHTTPConnectionParamsSchema } from '@google/adk';
+ *   import { MCPToolset } from '@paean-ai/adk';
+ *   import { StreamableHTTPConnectionParamsSchema } from '@paean-ai/adk';
  *
  *   const connectionParams = StreamableHTTPConnectionParamsSchema.parse({
  *     type: "StreamableHTTPConnectionParams",

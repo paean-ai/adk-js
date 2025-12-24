@@ -1,7 +1,7 @@
 # Agent Development Kit (ADK) for TypeScript
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![NPM Version](https://img.shields.io/npm/v/@google/adk)](https://www.npmjs.com/package/@google/adk)
+[![NPM Version](https://img.shields.io/npm/v/@paean-ai/adk)](https://www.npmjs.com/package/@paean-ai/adk)
 [![r/agentdevelopmentkit](https://img.shields.io/badge/Reddit-r%2Fagentdevelopmentkit-FF4500?style=flat&logo=reddit&logoColor=white)](https://www.reddit.com/r/agentdevelopmentkit/)
 
 <html>
@@ -47,13 +47,13 @@ debugging, versioning, and deployment anywhere – from your laptop to the cloud
 If you're using npm, add the following to your dependencies:
 
 ```bash
-npm install @google/adk
+npm install @paean-ai/adk
 ```
 
 Or with yarn:
 
 ```bash
-yarn add @google/adk
+yarn add @paean-ai/adk
 ```
 
 ## 📚 Documentation
@@ -69,7 +69,7 @@ documentation & samples:
 ### Same Features & Familiar Interface As Other ADKs:
 
 ```typescript
-import { LlmAgent, GOOGLE_SEARCH } from '@google/adk';
+import { LlmAgent, GOOGLE_SEARCH } from '@paean-ai/adk';
 
 const rootAgent = new LlmAgent({
     name: 'search_assistant',

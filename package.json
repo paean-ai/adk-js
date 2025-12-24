@@ -1,13 +1,13 @@
 {
   "name": "adk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Google ADK JS",
   "author": "Google",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/google/adk-js"
+    "url": "https://github.com/paean-ai/adk-js"
   },
   "scripts": {
     "build": "npm run build --workspaces",

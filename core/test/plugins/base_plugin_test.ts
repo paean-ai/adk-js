@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseAgent, BasePlugin, BaseTool, CallbackContext, createEvent, Event, EventActions, InvocationContext, LlmRequest, LlmResponse, ToolContext} from '@google/adk';
+import {BaseAgent, BasePlugin, BaseTool, CallbackContext, createEvent, Event, EventActions, InvocationContext, LlmRequest, LlmResponse, ToolContext} from '@paean-ai/adk';
 import {Content} from '@google/genai';
 
 class TestablePlugin extends BasePlugin {

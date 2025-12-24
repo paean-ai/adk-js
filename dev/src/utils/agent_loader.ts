@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {BaseAgent} from '@google/adk';
+import {BaseAgent} from '@paean-ai/adk';
 import esbuild from 'esbuild';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
