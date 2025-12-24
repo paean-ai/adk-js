@@ -132,34 +132,33 @@ program.command('api_server')
   });
 
 program.command('create')
-  .description('Creates a new agent')
-  .argument('<agent>', 'Name to give the new agent')
-  .option(
-    '--model <string>',
-    'Optional. THe model used for the root_agent')
-  .option(
-    '--api_key <string>',
-    'Optional. The API Key needed to access the model, e.g. Google AI API Key.')
-  .option(
-    '--project <string>',
-    'Optional. The Google Cloud Project for using VertexAI as backend.')
-  .option(
-    '--region <string>',
-    'Optional. The Google Cloud Region for using VertexAI as backend.')
-  .option(
-    '--language <string>',
-    'Optional. Either ts or js as the language to output.')
-  .action((agentName: string, options: Record<string, string>) => {
-
-    createAgent({
-      agentName,
-      model: options['model'],
-      apiKey: options['api_key'],
-      project: options['project'],
-      region: options['region'],
-      language: options['language'],
+    .description('Creates a new agent')
+    .argument('[agent]', 'Name to give the new agent', 'adk_agent')
+    .option('-y, --yes', 'Optional. Skip confirmation prompts.')
+    .option('--model <string>', 'Optional. THe model used for the root_agent')
+    .option(
+        '--api_key <string>',
+        'Optional. The API Key needed to access the model, e.g. Google AI API Key.')
+    .option(
+        '--project <string>',
+        'Optional. The Google Cloud Project for using VertexAI as backend.')
+    .option(
+        '--region <string>',
+        'Optional. The Google Cloud Region for using VertexAI as backend.')
+    .option(
+        '--language <string>',
+        'Optional. Either ts or js as the language to output.')
+    .action((agentName: string, options: Record<string, string>) => {
+      createAgent({
+        agentName,
+        forceYes: !!options['yes'],
+        model: options['model'],
+        apiKey: options['api_key'],
+        project: options['project'],
+        region: options['region'],
+        language: options['language'],
+      });
     });
-  });
 
 
 program.command('run')

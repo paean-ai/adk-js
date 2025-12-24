@@ -15,26 +15,24 @@ const dirname = process.cwd();
 
 const TS_CONFIG = `{
   "compilerOptions": {
-    "module": "nodenext",
     "target": "esnext",
-    "types": [],
-
-    // Other Outputs
-    "sourceMap": true,
+    "module": "nodenext",
+    "rootDir": "./",
+    "outDir": "dist",
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "declaration": true,
     "declarationMap": true,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
     "exactOptionalPropertyTypes": true,
-
-    // Recommended Options
-    "strict": true,
-    "verbatimModuleSyntax": false,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "pretty": true,
     "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true
   }
 }
 `.trim();
@@ -58,6 +56,9 @@ const PACKAGE_JSON = (agentName: string, language: string) => `
 const AGENT_TEMPLATE = (model: string) => `
 import {FunctionTool, LlmAgent} from '@google/adk';
 import {z} from 'zod';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 /* Mock tool implementation */
 const getCurrentTime = new FunctionTool({
@@ -81,8 +82,9 @@ export const rootAgent = new LlmAgent({
 });
 `.trim()
 
-interface AgentCreationOptions {
+                                              interface AgentCreationOptions {
   agentName: string;
+  forceYes: boolean;
   model: string;
   apiKey: string;
   project: string;
@@ -114,18 +116,23 @@ async function getGcpRegion(): Promise<string> {
   }
 }
 
-async function generateAgentFolder(agentDir: string) {
+async function generateAgentFolder(agentDir: string, forceYes: boolean) {
   if (!(await isFolderExists(agentDir))) {
     return await createFolder(agentDir)
   }
-  const overwriteFolderResponse: symbol | boolean = await select({
-    message: `Folder ${agentDir} already exists. Would you like to overwrite existing folder?`,
-    options: [
-      { label: 'Yes', value: true },
-      { label: 'No', value: false },
-    ],
-  },
-  );
+
+  const overwriteFolderResponse: symbol|boolean = forceYes ?
+      true :
+      await select(
+          {
+            message: `Folder ${
+                agentDir} already exists. Would you like to overwrite existing folder?`,
+            options: [
+              {label: 'Yes', value: true},
+              {label: 'No', value: false},
+            ],
+          },
+      );
 
   if (isCancel(overwriteFolderResponse)) {
     process.exit(0);
@@ -135,6 +142,7 @@ async function generateAgentFolder(agentDir: string) {
     console.error(`Agent directory ${agentDir} already exists.`);
     process.exit(0);
   }
+
   await removeFolder(agentDir);
   await createFolder(agentDir);
 }
@@ -163,27 +171,33 @@ async function generateFiles(options: AgentCreationOptions) {
   await saveToFile(path.join(agentDir, `agent.${options.language}`), AGENT_TEMPLATE(options.model || 'gemini-2.5-flash'));
   await saveToFile(path.join(agentDir, '.env'), generateEnvFile(options));
   await saveToFile(path.join(agentDir, 'package.json'), PACKAGE_JSON(options.agentName, options.language));
-  if (options.language == "ts") {
+  if (options.language === 'ts') {
     await saveToFile(path.join(agentDir, 'tsconfig.json'), TS_CONFIG);
   }
 }
 
 export async function createAgent(options: AgentCreationOptions) {
   const agentDir = path.join(dirname, options.agentName);
-  await generateAgentFolder(agentDir);
+  await generateAgentFolder(agentDir, options.forceYes);
 
   if (!options.model) {
-    const model: symbol | string = (await select(
-      {
-        message: 'Choose a model for the root agent',
-        options: [
-          { label: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
-          { label: 'gemini-2.5-pro', value: 'gemini-2.5-pro' },
-          { label: 'gemini-3-flash-preview', value: 'gemini-3-flash-preview' },
-          { label: 'gemini-3-pro-preview', value: 'gemini-3-pro-preview' },
-        ],
-      },
-    ));
+    const model: symbol|string = options.forceYes ?
+        'gemini-2.5-flash' :
+        (await select(
+            {
+              message: 'Choose a model for the root agent',
+              options: [
+                {label: 'gemini-2.5-flash', value: 'gemini-2.5-flash'},
+                {label: 'gemini-2.5-pro', value: 'gemini-2.5-pro'},
+                {
+                  label: 'gemini-3-flash-preview',
+                  value: 'gemini-3-flash-preview'
+                },
+                {label: 'gemini-3-pro-preview', value: 'gemini-3-pro-preview'},
+              ],
+            },
+            ));
+
     if (isCancel(model)) {
       process.exit(0);
     }
@@ -191,14 +205,18 @@ export async function createAgent(options: AgentCreationOptions) {
   }
 
   if (options.language !== "js" && options.language !== "ts") {
-    const language = (await select({
-      message: 'Choose a language for the agent',
-      options: [
-        { label: 'JavaScript', value: 'js' },
-        { label: 'TypeScript', value: 'ts' },
-      ],
-    },
-    ));
+    const language = options.forceYes ?
+        'ts' :
+        (await select(
+            {
+              message: 'Choose a language for the agent',
+              options: [
+                {label: 'TypeScript', value: 'ts'},
+                {label: 'JavaScript', value: 'js'},
+              ],
+            },
+            ));
+
     if (isCancel(language)) {
       process.exit(0);
     }
@@ -206,45 +224,60 @@ export async function createAgent(options: AgentCreationOptions) {
   }
 
   if (!options.apiKey && !options.project) {
-    const backend: symbol | string = (await select({
-      message: 'Choose a backend',
-      options: [
-        { label: 'Google AI', value: 'googleai' },
-        { label: 'Vertex AI', value: 'vertex' },
-      ],
-    },
-    ));
+    const backend: symbol|string = options.forceYes ?
+        'googleai' :
+        (await select(
+            {
+              message: 'Choose a backend',
+              options: [
+                {label: 'Google AI', value: 'googleai'},
+                {label: 'Vertex AI', value: 'vertex'},
+              ],
+            },
+            ));
+
     if (isCancel(backend)) {
       process.exit(0);
     }
 
     if (backend === 'vertex') {
-      const projectResponse: string = (await text(
-        {
-          message: 'Enter the Google Cloud Project ID',
-          initialValue: await getGcpProject(),
-        },
-      )).toString();
+      const defaultProject = await getGcpProject();
+      const defaultRegion = await getGcpRegion();
+
+      const projectResponse: string = options.forceYes ?
+          defaultProject :
+          (await text(
+               {
+                 message: 'Enter the Google Cloud Project ID',
+                 initialValue: defaultProject,
+               },
+               ))
+              .toString();
+
       if (isCancel(projectResponse)) {
         process.exit(0);
       }
       options.project = projectResponse;
 
-      const regionResponse: symbol | string = (await text({
-        message: 'Enter the Google Cloud Region',
-        initialValue: await getGcpRegion(),
-      },
-      ));
+      const regionResponse: symbol|string =
+          options.forceYes ? defaultRegion : (await text({
+            message: 'Enter the Google Cloud Region',
+            initialValue: defaultRegion,
+          }));
+
       if (isCancel(regionResponse)) {
         process.exit(0);
       }
       options.region = regionResponse;
     } else {
-      const apiKeyResponse: symbol | string = (await text(
-        {
-          message: 'Enter the Google API Key',
-        },
-      ));
+      const apiKeyResponse: symbol|string = options.forceYes ?
+          '' :
+          (await text(
+              {
+                message: 'Enter the Google API Key',
+              },
+              ));
+
       if (isCancel(apiKeyResponse)) {
         process.exit(0);
       }
@@ -256,11 +289,15 @@ export async function createAgent(options: AgentCreationOptions) {
   if (options.language === "ts") {
     await execPromise(`npm install typescript --save-dev`, { cwd: agentDir });
   }
-  await execPromise(`npm install @google/adk @google/adk-devtools zod@3.25.76`, { cwd: agentDir });
+  await execPromise(
+      `npm install @google/adk @google/adk-devtools zod@3.25.76 dotenv`,
+      {cwd: agentDir});
 
   const files = await listFiles(agentDir);
-  console.log(`\nCreated the following files in ${agentDir}:`);
-  files.forEach(file => {console.log(`  - ${file}`);});
 
+  console.log(`\nCreated the following files in ${agentDir}:`);
+  files.forEach(file => {
+    console.log(`  - ${file}`);
+  });
   console.log(`Run 'cd ${options.agentName} && npm run web' to start the agent in a web interface`);
 }
