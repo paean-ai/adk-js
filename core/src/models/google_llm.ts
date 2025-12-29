@@ -23,9 +23,15 @@ const AGENT_ENGINE_TELEMETRY_ENV_VARIABLE_NAME = 'GOOGLE_CLOUD_AGENT_ENGINE_ID';
 
 /**
  * Default API endpoint for Gemini 3 preview models.
- * Gemini 3 preview models require the aiplatform.googleapis.com endpoint.
+ * Gemini 3 preview models require the aiplatform.googleapis.com endpoint with
+ * the publishers/google path prefix.
+ *
+ * The SDK constructs URLs like: ${baseUrl}/models/${model}:generateContent
+ * But Gemini 3 preview needs: https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:generateContent
+ *
+ * So we set the baseUrl to include the path prefix up to (but not including) /models/
  */
-const GEMINI3_PREVIEW_API_ENDPOINT = 'https://aiplatform.googleapis.com';
+const GEMINI3_PREVIEW_API_ENDPOINT = 'https://aiplatform.googleapis.com/v1/publishers/google';
 
 /**
  * The parameters for creating a Gemini instance.
@@ -296,6 +302,17 @@ export class Gemini extends BaseLlm {
       if (this.apiEndpoint) {
         httpOptions.baseUrl = this.apiEndpoint;
         logger.debug(`Using custom API endpoint: ${this.apiEndpoint}`);
+
+        // For Gemini 3 preview models on aiplatform.googleapis.com, we need to:
+        // 1. Use the baseUrl that includes /v1/publishers/google path
+        // 2. Prevent the SDK from adding its own API version prefix
+        // The baseUrl already contains the version, so we don't need apiVersion
+        if (this.isGemini3Preview) {
+          // Set empty apiVersion to prevent SDK from adding version prefix
+          // since the version is already included in the baseUrl
+          httpOptions.apiVersion = '';
+          logger.info(`Gemini 3 preview mode: using direct API path without version prefix`);
+        }
       }
 
       this._apiClient = new GoogleGenAI({
@@ -331,6 +348,12 @@ export class Gemini extends BaseLlm {
       };
       if (this.apiEndpoint) {
         httpOptions.baseUrl = this.apiEndpoint;
+
+        // For Gemini 3 preview models, the baseUrl already contains the version
+        // so we don't need the SDK to add another version prefix
+        if (this.isGemini3Preview) {
+          httpOptions.apiVersion = '';
+        }
       }
 
       this._liveApiClient = new GoogleGenAI({
@@ -359,7 +382,10 @@ export class Gemini extends BaseLlm {
           llmRequest.liveConnectConfig.httpOptions.headers,
           this.trackingHeaders,
       );
-      llmRequest.liveConnectConfig.httpOptions.apiVersion = this.liveApiVersion;
+      // For Gemini 3 preview, the baseUrl already contains the version
+      // so we use empty apiVersion to prevent double version prefix
+      llmRequest.liveConnectConfig.httpOptions.apiVersion =
+          this.isGemini3Preview ? '' : this.liveApiVersion;
     }
 
     if (llmRequest.config?.systemInstruction) {
