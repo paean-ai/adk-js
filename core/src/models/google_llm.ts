@@ -8,6 +8,7 @@ import {Blob, createPartFromText, FileData, FinishReason, GenerateContentRespons
 
 import {isBrowser} from '../utils/env_aware_utils.js';
 import {logger} from '../utils/logger.js';
+import {isGemini3PreviewModel} from '../utils/model_name.js';
 import {GoogleLLMVariant} from '../utils/variant_utils.js';
 import {version} from '../version.js';
 
@@ -19,6 +20,12 @@ import {createLlmResponse, LlmResponse} from './llm_response.js';
 
 const AGENT_ENGINE_TELEMETRY_TAG = 'remote_reasoning_engine';
 const AGENT_ENGINE_TELEMETRY_ENV_VARIABLE_NAME = 'GOOGLE_CLOUD_AGENT_ENGINE_ID';
+
+/**
+ * Default API endpoint for Gemini 3 preview models.
+ * Gemini 3 preview models require the aiplatform.googleapis.com endpoint.
+ */
+const GEMINI3_PREVIEW_API_ENDPOINT = 'https://aiplatform.googleapis.com';
 
 /**
  * The parameters for creating a Gemini instance.
@@ -50,6 +57,15 @@ export interface GeminiParams {
    * Headers to merge with internally crafted headers.
    */
   headers?: Record<string, string>;
+  /**
+   * Custom API endpoint URL. If not provided, uses the default endpoint
+   * based on the model type:
+   * - Gemini 3 preview models: aiplatform.googleapis.com
+   * - Other models: uses SDK default (generativelanguage.googleapis.com)
+   *
+   * Can also be set via GEMINI_API_ENDPOINT environment variable.
+   */
+  apiEndpoint?: string;
 }
 
 /**
@@ -61,6 +77,8 @@ export class Gemini extends BaseLlm {
   private readonly project?: string;
   private readonly location?: string;
   private readonly headers?: Record<string, string>;
+  private readonly apiEndpoint?: string;
+  private readonly isGemini3Preview: boolean;
 
   /**
    * @param params The parameters for creating a Gemini instance.
@@ -72,6 +90,7 @@ export class Gemini extends BaseLlm {
     project,
     location,
     headers,
+    apiEndpoint,
   }: GeminiParams) {
     if (!model) {
       model = 'gemini-2.5-flash';
@@ -83,8 +102,20 @@ export class Gemini extends BaseLlm {
     this.location = location;
     this.apiKey = apiKey;
     this.headers = headers;
+    this.isGemini3Preview = isGemini3PreviewModel(model);
 
     const canReadEnv = typeof process === 'object';
+
+    // Handle API endpoint configuration
+    this.apiEndpoint = apiEndpoint;
+    if (!this.apiEndpoint && canReadEnv) {
+      this.apiEndpoint = process.env['GEMINI_API_ENDPOINT'];
+    }
+    // For Gemini 3 preview models, use the aiplatform.googleapis.com endpoint by default
+    if (!this.apiEndpoint && this.isGemini3Preview) {
+      this.apiEndpoint = GEMINI3_PREVIEW_API_ENDPOINT;
+      logger.info(`Using Gemini 3 preview endpoint: ${this.apiEndpoint}`);
+    }
 
     this.vertexai = !!vertexai;
     if (!this.vertexai && canReadEnv) {
@@ -260,9 +291,16 @@ export class Gemini extends BaseLlm {
       });
     }
     else {
+      // Build httpOptions with optional baseUrl for Gemini 3 preview models
+      const httpOptions: Record<string, unknown> = {headers: combinedHeaders};
+      if (this.apiEndpoint) {
+        httpOptions.baseUrl = this.apiEndpoint;
+        logger.debug(`Using custom API endpoint: ${this.apiEndpoint}`);
+      }
+
       this._apiClient = new GoogleGenAI({
         apiKey: this.apiKey,
-        httpOptions: {headers: combinedHeaders},
+        httpOptions,
       });
     }
     return this._apiClient;
@@ -287,12 +325,17 @@ export class Gemini extends BaseLlm {
 
   get liveApiClient(): GoogleGenAI {
     if (!this._liveApiClient) {
+      const httpOptions: Record<string, unknown> = {
+        headers: this.trackingHeaders,
+        apiVersion: this.liveApiVersion,
+      };
+      if (this.apiEndpoint) {
+        httpOptions.baseUrl = this.apiEndpoint;
+      }
+
       this._liveApiClient = new GoogleGenAI({
         apiKey: this.apiKey,
-        httpOptions: {
-          headers: this.trackingHeaders,
-          apiVersion: this.liveApiVersion,
-        },
+        httpOptions,
       });
     }
     return this._liveApiClient;

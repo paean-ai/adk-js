@@ -59,3 +59,28 @@ export function isGemini2Model(modelString: string): boolean {
 
   return modelName.startsWith('gemini-2');
 }
+
+/**
+ * Check if the model is a Gemini 3.x model using regex patterns.
+ *
+ * @param modelString Either a simple model name or path - based model name
+ * @return true if it's a Gemini 3.x model, false otherwise.
+ */
+export function isGemini3Model(modelString: string): boolean {
+  const modelName = extractModelName(modelString);
+
+  return modelName.startsWith('gemini-3');
+}
+
+/**
+ * Check if the model is a Gemini 3.x preview model.
+ * Preview models require special endpoint handling (aiplatform.googleapis.com).
+ *
+ * @param modelString Either a simple model name or path - based model name
+ * @return true if it's a Gemini 3.x preview model, false otherwise.
+ */
+export function isGemini3PreviewModel(modelString: string): boolean {
+  const modelName = extractModelName(modelString);
+
+  return modelName.startsWith('gemini-3') && modelName.includes('preview');
+}
