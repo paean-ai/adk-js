@@ -123,14 +123,35 @@ export class Gemini extends BaseLlm {
       logger.info(`Using Gemini 3 preview endpoint: ${this.apiEndpoint}`);
     }
 
-    this.vertexai = !!vertexai;
-    if (!this.vertexai && canReadEnv) {
+    // Determine vertexai mode from constructor or environment
+    let useVertexAI = !!vertexai;
+    if (!useVertexAI && canReadEnv) {
       const vertexAIfromEnv = process.env['GOOGLE_GENAI_USE_VERTEXAI'];
       if (vertexAIfromEnv) {
-        this.vertexai =
+        useVertexAI =
           vertexAIfromEnv.toLowerCase() === 'true' || vertexAIfromEnv === '1';
       }
     }
+
+    // For Gemini 3 preview models, force API key mode instead of Vertex AI.
+    // This is because Gemini 3 preview requires a special endpoint path
+    // (publishers/google/models/) that is not compatible with standard Vertex AI
+    // SDK configuration. The custom apiEndpoint is only applied in non-Vertex AI mode.
+    if (this.isGemini3Preview && useVertexAI) {
+      // Check if API key is available before switching modes
+      const availableApiKey = apiKey ||
+          (canReadEnv ? (process.env['GOOGLE_GENAI_API_KEY'] || process.env['GEMINI_API_KEY']) : undefined);
+      if (availableApiKey) {
+        logger.info('Gemini 3 preview detected with Vertex AI mode. Switching to API key mode for correct endpoint handling.');
+        useVertexAI = false;
+        this.apiKey = availableApiKey;
+      } else {
+        logger.warn('Gemini 3 preview requires API key authentication for correct endpoint handling. ' +
+            'Set GEMINI_API_KEY or GOOGLE_GENAI_API_KEY environment variable for best compatibility.');
+      }
+    }
+
+    this.vertexai = useVertexAI;
 
     if (this.vertexai) {
       if (canReadEnv && !this.project) {
