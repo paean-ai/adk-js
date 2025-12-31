@@ -298,10 +298,33 @@ export class Gemini extends BaseLlm {
             usageMetadata: llmResponse.usageMetadata,
           };
           thoughtText = '';
-          thoughtSignature = undefined;
+          // Keep thoughtSignature for function calls - Gemini 3 requires it on function call parts
           text = '';
         }
+
+        // For Gemini 3 thinking mode: ensure function call parts have thoughtSignature
+        // The API may return function calls without thoughtSignature, but when sending
+        // the history back to the model, each function call part needs a thoughtSignature
+        // to maintain the reasoning chain.
+        if (
+          this.isGemini3Preview &&
+          thoughtSignature &&
+          llmResponse.content?.parts
+        ) {
+          for (const part of llmResponse.content.parts) {
+            if (part.functionCall && !part.thoughtSignature) {
+              part.thoughtSignature = thoughtSignature;
+            }
+          }
+        }
+
         yield llmResponse;
+
+        // Clear thoughtSignature after yielding function call response
+        // The signature has been applied to the function call parts
+        if (llmResponse.content?.parts?.some(part => part.functionCall)) {
+          thoughtSignature = undefined;
+        }
       }
       if (
         (text || thoughtText) &&
@@ -333,7 +356,31 @@ export class Gemini extends BaseLlm {
         contents: llmRequest.contents,
         config: llmRequest.config,
       });
-      yield createLlmResponse(response);
+      const llmResponse = createLlmResponse(response);
+
+      // For Gemini 3 thinking mode in non-streaming: propagate thoughtSignature
+      // from thought parts to function call parts if they don't have one.
+      // This ensures the reasoning chain is maintained in multi-turn conversations.
+      if (this.isGemini3Preview && llmResponse.content?.parts) {
+        // Find the thoughtSignature from thought parts
+        let thoughtSig: string | undefined;
+        for (const part of llmResponse.content.parts) {
+          if (part.thought && part.thoughtSignature) {
+            thoughtSig = part.thoughtSignature;
+            break;
+          }
+        }
+        // Apply to function call parts that don't have a signature
+        if (thoughtSig) {
+          for (const part of llmResponse.content.parts) {
+            if (part.functionCall && !part.thoughtSignature) {
+              part.thoughtSignature = thoughtSig;
+            }
+          }
+        }
+      }
+
+      yield llmResponse;
     }
   }
 
