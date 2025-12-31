@@ -336,8 +336,12 @@ export class Gemini extends BaseLlm {
         }
       }
 
+      // Explicitly set vertexai: false to prevent SDK from auto-detecting
+      // Vertex AI mode based on environment (e.g., GCP credentials on Cloud Run).
+      // This ensures the API key authentication and custom baseUrl are used.
       this._apiClient = new GoogleGenAI({
         apiKey: this.apiKey,
+        vertexai: false,
         httpOptions,
       });
     }
