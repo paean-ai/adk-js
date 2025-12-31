@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {Blob, createPartFromText, FileData, FinishReason, GenerateContentResponse, GoogleGenAI, Part} from '@google/genai';
+import {
+  Blob,
+  createPartFromText,
+  FileData,
+  FinishReason,
+  GenerateContentResponse,
+  GoogleGenAI,
+  Part,
+} from '@google/genai';
 
-import {isBrowser} from '../utils/env_aware_utils.js';
 import {logger} from '../utils/logger.js';
 import {isGemini3PreviewModel} from '../utils/model_name.js';
 import {GoogleLLMVariant} from '../utils/variant_utils.js';
-import {version} from '../version.js';
 
 import {BaseLlm} from './base_llm.js';
 import {BaseLlmConnection} from './base_llm_connection.js';
@@ -31,7 +37,8 @@ const AGENT_ENGINE_TELEMETRY_ENV_VARIABLE_NAME = 'GOOGLE_CLOUD_AGENT_ENGINE_ID';
  *
  * So we set the baseUrl to include the path prefix up to (but not including) /models/
  */
-const GEMINI3_PREVIEW_API_ENDPOINT = 'https://aiplatform.googleapis.com/v1/publishers/google';
+const GEMINI3_PREVIEW_API_ENDPOINT =
+  'https://aiplatform.googleapis.com/v1/publishers/google';
 
 /**
  * The parameters for creating a Gemini instance.
@@ -139,15 +146,22 @@ export class Gemini extends BaseLlm {
     // SDK configuration. The custom apiEndpoint is only applied in non-Vertex AI mode.
     if (this.isGemini3Preview && useVertexAI) {
       // Check if API key is available before switching modes
-      const availableApiKey = apiKey ||
-          (canReadEnv ? (process.env['GOOGLE_GENAI_API_KEY'] || process.env['GEMINI_API_KEY']) : undefined);
+      const availableApiKey =
+        apiKey ||
+        (canReadEnv
+          ? process.env['GOOGLE_GENAI_API_KEY'] || process.env['GEMINI_API_KEY']
+          : undefined);
       if (availableApiKey) {
-        logger.info('Gemini 3 preview detected with Vertex AI mode. Switching to API key mode for correct endpoint handling.');
+        logger.info(
+          'Gemini 3 preview detected with Vertex AI mode. Switching to API key mode for correct endpoint handling.',
+        );
         useVertexAI = false;
         this.apiKey = availableApiKey;
       } else {
-        logger.warn('Gemini 3 preview requires API key authentication for correct endpoint handling. ' +
-            'Set GEMINI_API_KEY or GOOGLE_GENAI_API_KEY environment variable for best compatibility.');
+        logger.warn(
+          'Gemini 3 preview requires API key authentication for correct endpoint handling. ' +
+            'Set GEMINI_API_KEY or GOOGLE_GENAI_API_KEY environment variable for best compatibility.',
+        );
       }
     }
 
@@ -162,20 +176,23 @@ export class Gemini extends BaseLlm {
       }
       if (!this.project) {
         throw new Error(
-            'VertexAI project must be provided via constructor or GOOGLE_CLOUD_PROJECT environment variable.');
+          'VertexAI project must be provided via constructor or GOOGLE_CLOUD_PROJECT environment variable.',
+        );
       }
       if (!this.location) {
         throw new Error(
-            'VertexAI location must be provided via constructor or GOOGLE_CLOUD_LOCATION environment variable.');
+          'VertexAI location must be provided via constructor or GOOGLE_CLOUD_LOCATION environment variable.',
+        );
       }
     } else {
       if (!this.apiKey && canReadEnv) {
-        this.apiKey = process.env['GOOGLE_GENAI_API_KEY'] ||
-            process.env['GEMINI_API_KEY'];
+        this.apiKey =
+          process.env['GOOGLE_GENAI_API_KEY'] || process.env['GEMINI_API_KEY'];
       }
       if (!this.apiKey) {
         throw new Error(
-            'API key must be provided via constructor or GOOGLE_GENAI_API_KEY or GEMINI_API_KEY environment variable.');
+          'API key must be provided via constructor or GOOGLE_GENAI_API_KEY or GEMINI_API_KEY environment variable.',
+        );
       }
     }
   }
@@ -185,7 +202,7 @@ export class Gemini extends BaseLlm {
    *
    * @returns A list of supported models.
    */
-  static override readonly supportedModels: Array<string|RegExp> = [
+  static override readonly supportedModels: Array<string | RegExp> = [
     /gemini-.*/,
     // fine-tuned vertex endpoint pattern
     /projects\/.+\/locations\/.+\/endpoints\/.+/,
@@ -206,16 +223,16 @@ export class Gemini extends BaseLlm {
    * @param stream bool = false, whether to do streaming call.
    * @yields LlmResponse: The model response.
    */
-  override async *
-      generateContentAsync(
-          llmRequest: LlmRequest,
-          stream = false,
-          ): AsyncGenerator<LlmResponse, void> {
+  override async *generateContentAsync(
+    llmRequest: LlmRequest,
+    stream = false,
+  ): AsyncGenerator<LlmResponse, void> {
     this.preprocessRequest(llmRequest);
     this.maybeAppendUserContent(llmRequest);
     logger.info(
-        `Sending out request, model: ${llmRequest.model}, backend: ${
-            this.apiBackend}, stream: ${stream}`,
+      `Sending out request, model: ${llmRequest.model}, backend: ${
+        this.apiBackend
+      }, stream: ${stream}`,
     );
 
     if (llmRequest.config?.httpOptions) {
@@ -232,9 +249,10 @@ export class Gemini extends BaseLlm {
         config: llmRequest.config,
       });
       let thoughtText = '';
+      let thoughtSignature: string | undefined;
       let text = '';
       let usageMetadata;
-      let lastResponse: GenerateContentResponse|undefined;
+      let lastResponse: GenerateContentResponse | undefined;
 
       // TODO - b/425992518: verify the type of streaming response is correct.
       for await (const response of streamResult) {
@@ -246,16 +264,28 @@ export class Gemini extends BaseLlm {
         if (firstPart?.text) {
           if ('thought' in firstPart && firstPart.thought) {
             thoughtText += firstPart.text;
+            // Preserve thoughtSignature from the thought parts for Gemini 3 thinking mode
+            if ('thoughtSignature' in firstPart && firstPart.thoughtSignature) {
+              thoughtSignature = firstPart.thoughtSignature as string;
+            }
           } else {
             text += firstPart.text;
           }
           llmResponse.partial = true;
         } else if (
-            (thoughtText || text) && (!firstPart || !firstPart.inlineData)) {
+          (thoughtText || text) &&
+          (!firstPart || !firstPart.inlineData)
+        ) {
           // Flushes the data if there's no more text.
           const parts: Part[] = [];
           if (thoughtText) {
-            parts.push({text: thoughtText, thought: true});
+            // Include thoughtSignature when flushing accumulated thought text
+            // This is required for Gemini 3 thinking mode to maintain signature chain
+            const thoughtPart: Part = {text: thoughtText, thought: true};
+            if (thoughtSignature) {
+              thoughtPart.thoughtSignature = thoughtSignature;
+            }
+            parts.push(thoughtPart);
           }
           if (text) {
             parts.push(createPartFromText(text));
@@ -268,15 +298,23 @@ export class Gemini extends BaseLlm {
             usageMetadata: llmResponse.usageMetadata,
           };
           thoughtText = '';
+          thoughtSignature = undefined;
           text = '';
         }
         yield llmResponse;
       }
-      if ((text || thoughtText) &&
-          lastResponse?.candidates?.[0]?.finishReason === FinishReason.STOP) {
+      if (
+        (text || thoughtText) &&
+        lastResponse?.candidates?.[0]?.finishReason === FinishReason.STOP
+      ) {
         const parts: Part[] = [];
         if (thoughtText) {
-          parts.push({text: thoughtText, thought: true} as Part);
+          // Include thoughtSignature in final flush as well
+          const thoughtPart: Part = {text: thoughtText, thought: true};
+          if (thoughtSignature) {
+            thoughtPart.thoughtSignature = thoughtSignature;
+          }
+          parts.push(thoughtPart);
         }
         if (text) {
           parts.push({text: text});
@@ -307,7 +345,7 @@ export class Gemini extends BaseLlm {
     const combinedHeaders = {
       ...this.trackingHeaders,
       ...this.headers,
-    }
+    };
 
     if (this.vertexai) {
       this._apiClient = new GoogleGenAI({
@@ -316,8 +354,7 @@ export class Gemini extends BaseLlm {
         location: this.location,
         httpOptions: {headers: combinedHeaders},
       });
-    }
-    else {
+    } else {
       // Build httpOptions with optional baseUrl for Gemini 3 preview models
       const httpOptions: Record<string, unknown> = {headers: combinedHeaders};
       if (this.apiEndpoint) {
@@ -332,7 +369,9 @@ export class Gemini extends BaseLlm {
           // Set empty apiVersion to prevent SDK from adding version prefix
           // since the version is already included in the baseUrl
           httpOptions.apiVersion = '';
-          logger.info(`Gemini 3 preview mode: using direct API path without version prefix`);
+          logger.info(
+            `Gemini 3 preview mode: using direct API path without version prefix`,
+          );
         }
       }
 
@@ -350,17 +389,17 @@ export class Gemini extends BaseLlm {
 
   get apiBackend(): GoogleLLMVariant {
     if (!this._apiBackend) {
-      this._apiBackend = this.apiClient.vertexai ? GoogleLLMVariant.VERTEX_AI :
-                                                   GoogleLLMVariant.GEMINI_API;
+      this._apiBackend = this.apiClient.vertexai
+        ? GoogleLLMVariant.VERTEX_AI
+        : GoogleLLMVariant.GEMINI_API;
     }
     return this._apiBackend;
   }
 
   get liveApiVersion(): string {
     if (!this._liveApiVersion) {
-      this._liveApiVersion = this.apiBackend === GoogleLLMVariant.VERTEX_AI ?
-          'v1beta1' :
-          'v1alpha';
+      this._liveApiVersion =
+        this.apiBackend === GoogleLLMVariant.VERTEX_AI ? 'v1beta1' : 'v1alpha';
     }
     return this._liveApiVersion;
   }
@@ -404,21 +443,24 @@ export class Gemini extends BaseLlm {
         llmRequest.liveConnectConfig.httpOptions.headers = {};
       }
       Object.assign(
-          llmRequest.liveConnectConfig.httpOptions.headers,
-          this.trackingHeaders,
+        llmRequest.liveConnectConfig.httpOptions.headers,
+        this.trackingHeaders,
       );
       // For Gemini 3 preview, the baseUrl already contains the version
       // so we use empty apiVersion to prevent double version prefix
-      llmRequest.liveConnectConfig.httpOptions.apiVersion =
-          this.isGemini3Preview ? '' : this.liveApiVersion;
+      llmRequest.liveConnectConfig.httpOptions.apiVersion = this
+        .isGemini3Preview
+        ? ''
+        : this.liveApiVersion;
     }
 
     if (llmRequest.config?.systemInstruction) {
       llmRequest.liveConnectConfig.systemInstruction = {
         role: 'system',
         // TODO - b/425992518: validate type casting works well.
-        parts:
-            [createPartFromText(llmRequest.config.systemInstruction as string)],
+        parts: [
+          createPartFromText(llmRequest.config.systemInstruction as string),
+        ],
       };
     }
 
@@ -456,8 +498,8 @@ export class Gemini extends BaseLlm {
 }
 
 function removeDisplayNameIfPresent(
-    dataObj: Blob|FileData|undefined,
-    ): void {
+  dataObj: Blob | FileData | undefined,
+): void {
   // display_name is not supported for Gemini API (non-vertex)
   if (dataObj && (dataObj as FileData).displayName) {
     (dataObj as FileData).displayName = undefined;

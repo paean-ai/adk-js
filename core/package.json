@@ -1,6 +1,6 @@
 {
   "name": "@paean-ai/adk",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Google ADK JS (paean-ai fork with streaming fixes)",
   "author": "paean-ai",
   "license": "Apache-2.0",

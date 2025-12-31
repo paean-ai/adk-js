@@ -1,6 +1,6 @@
 {
   "name": "@paean-ai/adk-devtools",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Google ADK JS Development Tools",
   "author": "Google",
   "license": "Apache-2.0",
@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
-    "@paean-ai/adk": "^0.2.6",
+    "@paean-ai/adk": "^0.2.7",
     "commander": "^14.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
