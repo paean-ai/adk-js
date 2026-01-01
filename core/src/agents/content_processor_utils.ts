@@ -7,6 +7,7 @@ import {Content} from '@google/genai';
 
 import {createEvent, Event, getFunctionCalls, getFunctionResponses} from '../events/event.js';
 import {deepClone} from '../utils/deep_clone.js';
+import {logger} from '../utils/logger.js';
 
 import {removeClientFunctionCallId, REQUEST_CONFIRMATION_FUNCTION_CALL_NAME, REQUEST_EUC_FUNCTION_CALL_NAME} from './functions.js';
 
@@ -60,6 +61,55 @@ export function getContents(
     removeClientFunctionCallId(content);
     contents.push(content);
   }
+
+  // Logging for Gemini 3 thoughtSignature tracking
+  // Use info level for critical function call signature info
+  let hasFunctionCallWithoutSignature = false;
+  let problematicBlockIndex = -1;
+  
+  for (let i = 0; i < contents.length; i++) {
+    const content = contents[i];
+    const hasFunctionCalls = content.parts?.some(p => p.functionCall);
+    const hasThoughtSignature = content.parts?.some(p => p.thoughtSignature);
+    const hasThought = content.parts?.some(p => p.thought);
+
+    if (hasFunctionCalls) {
+      logger.info(
+        `[getContents] Content block ${i + 1}/${contents.length}: role=${content.role}, ` +
+        `hasFunctionCalls=true, hasThought=${hasThought}, hasSignature=${hasThoughtSignature}`,
+      );
+      
+      // Check if this block has function calls but no signature
+      if (!hasThoughtSignature && content.role === 'model') {
+        hasFunctionCallWithoutSignature = true;
+        problematicBlockIndex = i + 1;
+      }
+      
+      // Log each part for function call contents
+      for (let j = 0; j < (content.parts?.length || 0); j++) {
+        const part = content.parts![j];
+        if (part.functionCall) {
+          logger.info(
+            `[getContents]   Part ${j}: functionCall=${part.functionCall.name}, ` +
+            `hasSignature=${!!part.thoughtSignature}`,
+          );
+        } else if (part.thought) {
+          logger.info(
+            `[getContents]   Part ${j}: thought=true, hasSignature=${!!part.thoughtSignature}`,
+          );
+        }
+      }
+    }
+  }
+  
+  // CRITICAL: Warn if sending function calls without signature
+  if (hasFunctionCallWithoutSignature) {
+    logger.warn(
+      `[getContents] WARNING: Content block ${problematicBlockIndex} has model function calls but NO thoughtSignature! ` +
+      `This will likely cause a 400 error from Gemini 3 API.`,
+    );
+  }
+
   return contents;
 }
 

@@ -94,6 +94,14 @@ export class Gemini extends BaseLlm {
   private readonly isGemini3Preview: boolean;
 
   /**
+   * Cached thoughtSignature from Gemini 3 thinking mode responses.
+   * Gemini 3 may not return a new signature for follow-up tool calls in the same turn,
+   * so we cache the signature from the first response and reuse it for subsequent calls.
+   * This is reset at the start of each new generateContentAsync call.
+   */
+  private cachedThoughtSignature?: string;
+
+  /**
    * @param params The parameters for creating a Gemini instance.
    */
   constructor({
@@ -249,10 +257,18 @@ export class Gemini extends BaseLlm {
         config: llmRequest.config,
       });
       let thoughtText = '';
+      // Use local variable for current request, but fall back to cached
       let thoughtSignature: string | undefined;
       let text = '';
       let usageMetadata;
       let lastResponse: GenerateContentResponse | undefined;
+
+      // For Gemini 3: Log if we have a cached signature from previous request in this turn
+      if (this.isGemini3Preview && this.cachedThoughtSignature) {
+        logger.info(
+          `[Gemini3] Starting new request with CACHED thoughtSignature (length: ${this.cachedThoughtSignature.length})`,
+        );
+      }
 
       // TODO - b/425992518: verify the type of streaming response is correct.
       for await (const response of streamResult) {
@@ -260,6 +276,28 @@ export class Gemini extends BaseLlm {
         const llmResponse = createLlmResponse(response);
         usageMetadata = llmResponse.usageMetadata;
         const firstPart = llmResponse.content?.parts?.[0];
+
+        // Check if this response contains function calls
+        const hasFunctionCalls = llmResponse.content?.parts?.some(
+          (part) => part.functionCall,
+        );
+
+        // For Gemini 3: Extract thoughtSignature from any part that has it
+        // The API may return signature on thought parts or on the first function call
+        if (this.isGemini3Preview && llmResponse.content?.parts) {
+          for (const part of llmResponse.content.parts) {
+            if (part.thoughtSignature && !thoughtSignature) {
+              thoughtSignature = part.thoughtSignature;
+              // Cache the signature for future requests in the same turn
+              this.cachedThoughtSignature = thoughtSignature;
+              logger.info(
+                `[Gemini3] Captured and CACHED thoughtSignature from response part (length: ${thoughtSignature.length})`,
+              );
+              break;
+            }
+          }
+        }
+
         // Accumulates the text and thought text from the first part.
         if (firstPart?.text) {
           if ('thought' in firstPart && firstPart.thought) {
@@ -267,64 +305,202 @@ export class Gemini extends BaseLlm {
             // Preserve thoughtSignature from the thought parts for Gemini 3 thinking mode
             if ('thoughtSignature' in firstPart && firstPart.thoughtSignature) {
               thoughtSignature = firstPart.thoughtSignature as string;
+              // Cache the signature for future requests in the same turn
+              this.cachedThoughtSignature = thoughtSignature;
+              logger.info(
+                `[Gemini3] Captured and CACHED thoughtSignature from thought part (length: ${thoughtSignature.length})`,
+              );
             }
           } else {
             text += firstPart.text;
           }
           llmResponse.partial = true;
+
+          // For Gemini 3: If this chunk contains BOTH thought AND function calls,
+          // the response already has the complete structure. Clear accumulated text
+          // to avoid creating duplicate thought parts in post-loop flush.
+          if (this.isGemini3Preview && hasFunctionCalls) {
+            const responseHasSignature = llmResponse.content?.parts?.some(
+              (p) => p.thoughtSignature,
+            );
+            logger.info(
+              `[Gemini3] Chunk has thought AND function calls. Response has signature: ${responseHasSignature}`,
+            );
+            // The llmResponse already contains the thought with signature,
+            // so we don't need to create a separate one
+            thoughtText = '';
+            thoughtSignature = undefined;
+            text = '';
+          }
         } else if (
           (thoughtText || text) &&
           (!firstPart || !firstPart.inlineData)
         ) {
-          // Flushes the data if there's no more text.
-          const parts: Part[] = [];
-          if (thoughtText) {
-            // Include thoughtSignature when flushing accumulated thought text
-            // This is required for Gemini 3 thinking mode to maintain signature chain
-            const thoughtPart: Part = {text: thoughtText, thought: true};
-            if (thoughtSignature) {
-              thoughtPart.thoughtSignature = thoughtSignature;
+          // For Gemini 3: When we have accumulated thought text and encounter
+          // function calls, we need to MERGE them into the same content block.
+          // Per Google docs: thought_signature must be on the thought part or first function call.
+          // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+          if (
+            this.isGemini3Preview &&
+            hasFunctionCalls &&
+            llmResponse.content
+          ) {
+            logger.info(
+              `[Gemini3] Merging thought with function calls. Has accumulated signature: ${!!thoughtSignature}`,
+            );
+
+            // Prepend accumulated thought/text to the function call response
+            const prependParts: Part[] = [];
+            if (thoughtText) {
+              const thoughtPart: Part = {text: thoughtText, thought: true};
+              if (thoughtSignature) {
+                thoughtPart.thoughtSignature = thoughtSignature;
+              }
+              prependParts.push(thoughtPart);
+              logger.info(
+                `[Gemini3] Created thought part with signature: ${!!thoughtSignature}`,
+              );
             }
-            parts.push(thoughtPart);
+            if (text) {
+              prependParts.push(createPartFromText(text));
+            }
+
+            // Per Google docs: signature should be on thought part OR first function call
+            // If we have a thought part with signature, function calls don't need it
+            // If we don't have a thought part, first function call needs the signature
+            if (!thoughtText && thoughtSignature) {
+              // No thought text, put signature on first function call
+              let signatureApplied = false;
+              for (const part of llmResponse.content.parts || []) {
+                if (part.functionCall && !signatureApplied) {
+                  if (!part.thoughtSignature) {
+                    part.thoughtSignature = thoughtSignature;
+                    logger.info(
+                      `[Gemini3] Applied accumulated signature to first function call: ${part.functionCall.name}`,
+                    );
+                  }
+                  signatureApplied = true;
+                }
+              }
+            }
+
+            // Merge: prepend thought/text parts to the function call parts
+            llmResponse.content.parts = [
+              ...prependParts,
+              ...(llmResponse.content.parts || []),
+            ];
+
+            // Log the final structure
+            logger.info(
+              `[Gemini3] Final merged content has ${llmResponse.content.parts.length} parts`,
+            );
+            for (let i = 0; i < llmResponse.content.parts.length; i++) {
+              const p = llmResponse.content.parts[i];
+              logger.info(
+                `[Gemini3] Part ${i}: thought=${!!p.thought}, functionCall=${p.functionCall?.name || 'none'}, hasSignature=${!!p.thoughtSignature}`,
+              );
+            }
+
+            thoughtText = '';
+            thoughtSignature = undefined;
+            text = '';
+          } else {
+            // Non-Gemini 3 or no function calls: flush accumulated text separately
+            const parts: Part[] = [];
+            if (thoughtText) {
+              const thoughtPart: Part = {text: thoughtText, thought: true};
+              if (thoughtSignature) {
+                thoughtPart.thoughtSignature = thoughtSignature;
+              }
+              parts.push(thoughtPart);
+            }
+            if (text) {
+              parts.push(createPartFromText(text));
+            }
+            yield {
+              content: {
+                role: 'model',
+                parts,
+              },
+              usageMetadata: llmResponse.usageMetadata,
+            };
+            thoughtText = '';
+            thoughtSignature = undefined;
+            text = '';
           }
-          if (text) {
-            parts.push(createPartFromText(text));
-          }
-          yield {
-            content: {
-              role: 'model',
-              parts,
-            },
-            usageMetadata: llmResponse.usageMetadata,
-          };
-          thoughtText = '';
-          // Keep thoughtSignature for function calls - Gemini 3 requires it on function call parts
-          text = '';
         }
 
-        // For Gemini 3 thinking mode: ensure function call parts have thoughtSignature
-        // The API may return function calls without thoughtSignature, but when sending
-        // the history back to the model, each function call part needs a thoughtSignature
-        // to maintain the reasoning chain.
+        // For Gemini 3: If this response has function calls but no thought was accumulated,
+        // ensure the first function call has a signature (if we have one from before)
         if (
           this.isGemini3Preview &&
-          thoughtSignature &&
+          hasFunctionCalls &&
           llmResponse.content?.parts
         ) {
-          for (const part of llmResponse.content.parts) {
-            if (part.functionCall && !part.thoughtSignature) {
-              part.thoughtSignature = thoughtSignature;
+          // Check if any part already has a signature
+          const hasExistingSignature = llmResponse.content.parts.some(
+            (p) => p.thoughtSignature,
+          );
+
+          if (!hasExistingSignature && thoughtSignature) {
+            // Apply signature to first function call only
+            for (const part of llmResponse.content.parts) {
+              if (part.functionCall) {
+                part.thoughtSignature = thoughtSignature;
+                logger.info(
+                  `[Gemini3] Applied cached signature to first function call: ${part.functionCall.name}`,
+                );
+                break; // Only first one
+              }
             }
+          }
+
+          // Log final state before yielding
+          const functionCallNames = llmResponse.content.parts
+            .filter((p) => p.functionCall)
+            .map((p) => p.functionCall!.name);
+          let partsWithSig = llmResponse.content.parts.filter(
+            (p) => p.thoughtSignature,
+          ).length;
+
+          // CRITICAL: If no signature in response, try to use cached signature
+          // Gemini 3 may not return a new signature for follow-up tool calls in the same turn
+          if (partsWithSig === 0) {
+            // First try the local thoughtSignature, then fall back to cached
+            const signatureToUse =
+              thoughtSignature || this.cachedThoughtSignature;
+            if (signatureToUse) {
+              for (const part of llmResponse.content.parts) {
+                if (part.functionCall && !part.thoughtSignature) {
+                  part.thoughtSignature = signatureToUse;
+                  logger.info(
+                    `[Gemini3] Applied CACHED signature to function call: ${part.functionCall.name} (API didn't return new signature, using ${thoughtSignature ? 'local' : 'class-level'} cache)`,
+                  );
+                  partsWithSig = 1;
+                  break;
+                }
+              }
+            }
+          }
+
+          logger.info(
+            `[Gemini3] Yielding function call response: calls=[${functionCallNames.join(', ')}], partsWithSignature=${partsWithSig}`,
+          );
+
+          // CRITICAL: If still no signature found, log a warning
+          if (partsWithSig === 0) {
+            logger.warn(
+              `[Gemini3] WARNING: No thoughtSignature found and no cached signature available! This may cause 400 errors on next request.`,
+            );
           }
         }
 
         yield llmResponse;
 
-        // Clear thoughtSignature after yielding function call response
-        // The signature has been applied to the function call parts
-        if (llmResponse.content?.parts?.some(part => part.functionCall)) {
-          thoughtSignature = undefined;
-        }
+        // NOTE: Do NOT clear thoughtSignature after function calls!
+        // Gemini 3 may not return a new signature for follow-up tool calls,
+        // so we need to preserve the original signature for the entire session turn.
+        // The signature will be naturally reset when a new streaming request starts.
       }
       if (
         (text || thoughtText) &&
@@ -358,24 +534,84 @@ export class Gemini extends BaseLlm {
       });
       const llmResponse = createLlmResponse(response);
 
-      // For Gemini 3 thinking mode in non-streaming: propagate thoughtSignature
-      // from thought parts to function call parts if they don't have one.
-      // This ensures the reasoning chain is maintained in multi-turn conversations.
+      // For Gemini 3 thinking mode in non-streaming: ensure proper thoughtSignature handling
+      // Per Google docs: signature should be on thought part OR first function call only
+      // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
       if (this.isGemini3Preview && llmResponse.content?.parts) {
-        // Find the thoughtSignature from thought parts
+        // Find the thoughtSignature from any part
         let thoughtSig: string | undefined;
+        let hasThoughtPartWithSignature = false;
+
         for (const part of llmResponse.content.parts) {
-          if (part.thought && part.thoughtSignature) {
+          if (part.thoughtSignature) {
             thoughtSig = part.thoughtSignature;
+            // Cache the signature for future requests
+            this.cachedThoughtSignature = thoughtSig;
+            if (part.thought) {
+              hasThoughtPartWithSignature = true;
+            }
             break;
           }
         }
-        // Apply to function call parts that don't have a signature
-        if (thoughtSig) {
+
+        logger.info(
+          `[Gemini3] Non-streaming response: hasSignature=${!!thoughtSig}, hasThoughtPart=${hasThoughtPartWithSignature}, hasCachedSig=${!!this.cachedThoughtSignature}`,
+        );
+
+        // If we have a signature but it's not on a thought part,
+        // and there are function calls, ensure first function call has it
+        if (thoughtSig && !hasThoughtPartWithSignature) {
+          let signatureApplied = false;
           for (const part of llmResponse.content.parts) {
-            if (part.functionCall && !part.thoughtSignature) {
-              part.thoughtSignature = thoughtSig;
+            if (part.functionCall) {
+              if (!signatureApplied && !part.thoughtSignature) {
+                part.thoughtSignature = thoughtSig;
+                logger.info(
+                  `[Gemini3] Applied signature to first function call: ${part.functionCall.name}`,
+                );
+              }
+              signatureApplied = true;
             }
+          }
+        }
+
+        // Check for function calls and apply cached signature if needed
+        const hasFunctionCalls = llmResponse.content.parts.some(
+          (p) => p.functionCall,
+        );
+
+        if (hasFunctionCalls) {
+          let partsWithSig = llmResponse.content.parts.filter(
+            (p) => p.thoughtSignature,
+          ).length;
+
+          // If no signature found but we have a cached one, apply it
+          if (partsWithSig === 0 && this.cachedThoughtSignature) {
+            for (const part of llmResponse.content.parts) {
+              if (part.functionCall && !part.thoughtSignature) {
+                part.thoughtSignature = this.cachedThoughtSignature;
+                logger.info(
+                  `[Gemini3] Applied CACHED signature to function call: ${part.functionCall.name} (API didn't return new signature)`,
+                );
+                partsWithSig = 1;
+                break;
+              }
+            }
+          }
+
+          // Log the response structure
+          for (let i = 0; i < llmResponse.content.parts.length; i++) {
+            const p = llmResponse.content.parts[i];
+            logger.info(
+              `[Gemini3] Response Part ${i}: thought=${!!p.thought}, functionCall=${p.functionCall?.name || 'none'}, hasSignature=${!!p.thoughtSignature}`,
+            );
+          }
+
+          // CRITICAL: Warn if still no signature
+          if (partsWithSig === 0) {
+            logger.warn(
+              `[Gemini3] WARNING: No thoughtSignature found and no cached signature available! This may cause 400 errors on next request.`,
+            );
           }
         }
       }

@@ -1639,6 +1639,34 @@ export class LlmAgent extends BaseAgent {
         // Long running is a property of tool in registry.
         mergedEvent.longRunningToolIds = Array.from(
           getLongRunningFunctionCalls(functionCalls, llmRequest.toolsDict));
+
+        // Logging for Gemini 3 thoughtSignature tracking
+        const hasThought = mergedEvent.content.parts?.some(p => p.thought);
+        const hasSignature = mergedEvent.content.parts?.some(
+          p => p.thoughtSignature,
+        );
+        logger.info(
+          `[postprocess] Function call event: ${functionCalls.length} calls, ` +
+            `hasThought=${hasThought}, hasSignature=${hasSignature}`,
+        );
+        for (let i = 0; i < (mergedEvent.content.parts?.length || 0); i++) {
+          const part = mergedEvent.content.parts![i];
+          if (part.functionCall || part.thought) {
+            logger.info(
+              `[postprocess]   Part ${i}: thought=${!!part.thought}, ` +
+                `functionCall=${part.functionCall?.name || 'none'}, ` +
+                `hasSignature=${!!part.thoughtSignature}`,
+            );
+          }
+        }
+        
+        // CRITICAL: Warn if function calls present but no signature
+        if (!hasSignature) {
+          logger.warn(
+            `[postprocess] WARNING: Event has function calls but NO thoughtSignature! ` +
+            `This will cause 400 errors when this content is sent back to Gemini 3.`,
+          );
+        }
       }
     }
     yield mergedEvent;
