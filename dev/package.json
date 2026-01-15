@@ -1,6 +1,6 @@
 {
   "name": "@paean-ai/adk-devtools",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "Google ADK JS Development Tools",
   "author": "Google",
   "license": "Apache-2.0",
@@ -27,12 +27,12 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "clean:all": "npm run clean && rm -rf node_modules",
+    "clean:all": "bun run clean && rm -rf node_modules",
     "build": "tsc --emitDeclarationOnly && node ./build.js",
     "test": "vitest",
     "lint": "eslint 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts'",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
-    "@paean-ai/adk": "^0.2.13",
+    "@paean-ai/adk": "workspace:*",
     "commander": "^14.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
