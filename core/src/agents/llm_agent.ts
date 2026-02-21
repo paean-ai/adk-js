@@ -1748,6 +1748,13 @@ export class LlmAgent extends BaseAgent {
     return agentToRun;
   }
 
+  private static readonly LLM_TRANSIENT_ERROR_MAX_RETRIES = 2;
+  private static readonly LLM_TRANSIENT_ERROR_BASE_DELAY_MS = 1000;
+  private static readonly LLM_TRANSIENT_ERROR_MAX_DELAY_MS = 4000;
+  private static readonly LLM_RETRYABLE_ERROR_CODES = new Set([
+    'UNKNOWN_ERROR',
+  ]);
+
   private async *
     callLlmAsync(
       invocationContext: InvocationContext,
@@ -1781,21 +1788,63 @@ export class LlmAgent extends BaseAgent {
       throw new Error('CFC is not yet supported in callLlmAsync');
     } else {
       invocationContext.incrementLlmCallCount();
-      const responsesGenerator = llm.generateContentAsync(
-        llmRequest,
-          /* stream= */ invocationContext.runConfig?.streamingMode ===
-        StreamingMode.SSE,
-      );
+      const isStreaming =
+        invocationContext.runConfig?.streamingMode === StreamingMode.SSE;
+      const maxRetries = LlmAgent.LLM_TRANSIENT_ERROR_MAX_RETRIES;
 
-      for await (const llmResponse of this.runAndHandleError(
-        responsesGenerator, invocationContext, llmRequest,
-        modelResponseEvent)) {
-        // TODO - b/436079721: Add trace_call_llm
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+          const delay = Math.min(
+            LlmAgent.LLM_TRANSIENT_ERROR_BASE_DELAY_MS *
+              Math.pow(2, attempt - 1),
+            LlmAgent.LLM_TRANSIENT_ERROR_MAX_DELAY_MS,
+          );
+          logger.warn(
+            `[callLlmAsync] Retrying LLM call after transient error ` +
+              `(attempt ${attempt + 1}/${maxRetries + 1}), waiting ${delay}ms`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
 
-        // Runs after_model_callback if it exists.
-        const alteredLlmResponse = await this.handleAfterModelCallback(
-          invocationContext, llmResponse, modelResponseEvent);
-        yield alteredLlmResponse ?? llmResponse;
+        const responsesGenerator = llm.generateContentAsync(
+          llmRequest, isStreaming);
+
+        let shouldRetry = false;
+        let contentYielded = false;
+
+        for await (const llmResponse of this.runAndHandleError(
+          responsesGenerator, invocationContext, llmRequest,
+          modelResponseEvent)) {
+          if (llmResponse.content) {
+            contentYielded = true;
+          }
+
+          // Retry transient errors only when no content has been streamed yet
+          if (
+            llmResponse.errorCode &&
+            LlmAgent.LLM_RETRYABLE_ERROR_CODES.has(llmResponse.errorCode) &&
+            !contentYielded &&
+            attempt < maxRetries
+          ) {
+            shouldRetry = true;
+            logger.warn(
+              `[callLlmAsync] Transient LLM error: ${llmResponse.errorCode}, ` +
+                `usage: ${JSON.stringify(llmResponse.usageMetadata)}`,
+            );
+            break;
+          }
+
+          // TODO - b/436079721: Add trace_call_llm
+
+          // Runs after_model_callback if it exists.
+          const alteredLlmResponse = await this.handleAfterModelCallback(
+            invocationContext, llmResponse, modelResponseEvent);
+          yield alteredLlmResponse ?? llmResponse;
+        }
+
+        if (!shouldRetry) {
+          return;
+        }
       }
     }
   }
