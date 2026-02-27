@@ -28,11 +28,11 @@ jobs:
         run: bun install
 
       - name: Build
-        run: bun run build
+        run: bun run build:bundle
         working-directory: core
 
       - name: Publish
-        run: npm publish --access public
+        run: npm publish --access public --ignore-scripts
         working-directory: core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
