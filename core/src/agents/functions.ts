@@ -74,6 +74,34 @@ export function removeClientFunctionCallId(content: Content): void {
     }
   }
 }
+/**
+ * Resolves a function call name to the corresponding key in toolsDict.
+ *
+ * Gemini 3 models may return function call names in "tool_name:method_name"
+ * format (e.g. "google_search:search") while the tool is registered under
+ * just "tool_name" (e.g. "google_search"). This helper handles the fallback.
+ */
+function resolveToolName(
+    name: string,
+    toolsDict: Record<string, BaseTool>,
+    ): string|undefined {
+  if (name in toolsDict) {
+    return name;
+  }
+  // Gemini 3 colon-separated format: try the part before the colon
+  const colonIndex = name.indexOf(':');
+  if (colonIndex > 0) {
+    const baseName = name.substring(0, colonIndex);
+    if (baseName in toolsDict) {
+      logger.info(
+          `Resolved Gemini 3 function name "${name}" to tool "${baseName}"`,
+      );
+      return baseName;
+    }
+  }
+  return undefined;
+}
+
 // TODO - b/425992518: consider internalize as part of llm_agent's runtime.
 /**
  * Returns a set of function call ids of the long running tools.
@@ -84,8 +112,9 @@ export function getLongRunningFunctionCalls(
     ): Set<string> {
   const longRunningToolIds = new Set<string>();
   for (const functionCall of functionCalls) {
-    if (functionCall.name && functionCall.name in toolsDict &&
-        toolsDict[functionCall.name].isLongRunning && functionCall.id) {
+    if (!functionCall.name || !functionCall.id) continue;
+    const resolvedName = resolveToolName(functionCall.name, toolsDict);
+    if (resolvedName && toolsDict[resolvedName].isLongRunning) {
       longRunningToolIds.add(functionCall.id);
     }
   }
@@ -395,13 +424,15 @@ export async function handleFunctionCallList({
     }
 
     // Builds the function response event.
+    // Use the original functionCall.name (e.g. "google_search:search") so
+    // the model can correctly match the response to its request.
     const functionResponseEvent = createEvent({
       invocationId: invocationContext.invocationId,
       author: invocationContext.agent.name,
       content: createUserContent({
         functionResponse: {
           id: toolContext.functionCallId,
-          name: tool.name,
+          name: functionCall.name ?? tool.name,
           response: functionResponse,
         },
       }),
@@ -450,7 +481,11 @@ function getToolAndContext(
       toolConfirmation?: ToolConfirmation,
     },
     ): {tool: BaseTool; toolContext: ToolContext} {
-  if (!functionCall.name || !(functionCall.name in toolsDict)) {
+  const resolvedName = functionCall.name
+      ? resolveToolName(functionCall.name, toolsDict)
+      : undefined;
+
+  if (!resolvedName) {
     throw new Error(
         `Function ${functionCall.name} is not found in the toolsDict.`,
     );
@@ -462,7 +497,7 @@ function getToolAndContext(
     toolConfirmation,
   });
 
-  const tool = toolsDict[functionCall.name];
+  const tool = toolsDict[resolvedName];
 
   return {tool, toolContext};
 }

@@ -36,6 +36,10 @@ class GoogleSearchTool extends BaseTool {
       return;
     }
 
+    // Register in toolsDict so Gemini 3's "google_search:search" functionCall
+    // can be resolved back to this tool via colon-separated name fallback.
+    llmRequest.toolsDict[this.name] = this;
+
     llmRequest.config = llmRequest.config || {} as GenerateContentConfig;
     llmRequest.config.tools = llmRequest.config.tools || [];
 
