@@ -55,9 +55,9 @@ describe('Gemini 3 Model Detection', () => {
     expect(isGemini3PreviewModel('gemini-3-pro-preview')).toBe(true);
   });
 
-  it('should detect gemini-3-pro-image-preview as Gemini 3 preview model', () => {
-    expect(isGemini3Model('gemini-3-pro-image-preview')).toBe(true);
-    expect(isGemini3PreviewModel('gemini-3-pro-image-preview')).toBe(true);
+  it('should detect gemini-3.1-flash-image-preview as Gemini 3 preview model', () => {
+    expect(isGemini3Model('gemini-3.1-flash-image-preview')).toBe(true);
+    expect(isGemini3PreviewModel('gemini-3.1-flash-image-preview')).toBe(true);
   });
 
   it('should NOT detect gemini-2.5-flash as Gemini 3 model', () => {
