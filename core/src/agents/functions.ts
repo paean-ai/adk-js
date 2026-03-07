@@ -301,7 +301,7 @@ export async function handleFunctionCallList({
       toolConfirmation = toolConfirmationDict[functionCall.id];
     }
 
-    const {tool, toolContext} = getToolAndContext(
+    const toolAndContext = getToolAndContext(
         {
           invocationContext,
           functionCall,
@@ -309,6 +309,35 @@ export async function handleFunctionCallList({
           toolConfirmation,
         },
     );
+
+    // Gracefully handle unknown tools: return an error response to the LLM
+    // so it can self-correct, instead of crashing the entire agent run.
+    if (!toolAndContext) {
+      logger.warn(
+        `Function ${functionCall.name} is not found in the toolsDict. ` +
+        `Returning error response to LLM.`,
+      );
+      const errorResponseEvent = createEvent({
+        invocationId: invocationContext.invocationId,
+        author: invocationContext.agent.name,
+        content: createUserContent({
+          functionResponse: {
+            id: functionCall.id || undefined,
+            name: functionCall.name ?? 'unknown',
+            response: {
+              error: `Function ${functionCall.name} is not available. ` +
+                `If this tool belongs to a lazy-loaded group, call ` +
+                `loadToolGroup first in a SEPARATE step, then retry.`,
+            },
+          },
+        }),
+        branch: invocationContext.branch,
+      });
+      functionResponseEvents.push(errorResponseEvent);
+      continue;
+    }
+
+    const {tool, toolContext} = toolAndContext;
 
     // TODO - b/436079721: implement [tracer.start_as_current_span]
     logger.debug(`execute_tool ${tool.name}`);
@@ -480,15 +509,13 @@ function getToolAndContext(
       toolsDict: Record<string, BaseTool>,
       toolConfirmation?: ToolConfirmation,
     },
-    ): {tool: BaseTool; toolContext: ToolContext} {
+    ): {tool: BaseTool; toolContext: ToolContext} | null {
   const resolvedName = functionCall.name
       ? resolveToolName(functionCall.name, toolsDict)
       : undefined;
 
   if (!resolvedName) {
-    throw new Error(
-        `Function ${functionCall.name} is not found in the toolsDict.`,
-    );
+    return null;
   }
 
   const toolContext = new ToolContext({
