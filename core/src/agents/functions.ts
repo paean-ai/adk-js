@@ -312,12 +312,12 @@ export async function handleFunctionCallList({
 
     // Gracefully handle unknown tools: return an error response to the LLM
     // so it can self-correct, instead of crashing the entire agent run.
+    // We intentionally do NOT list all available tools in the response to
+    // avoid bloating context (the tool list can be 80+ items).
     if (!toolAndContext) {
-      const availableTools = Object.keys(toolsDict).join(', ');
       logger.warn(
-        `Function ${functionCall.name} is not found in the toolsDict. ` +
-        `Available tools: [${availableTools}]. ` +
-        `Returning error response to LLM.`,
+        `Function "${functionCall.name}" not found in toolsDict ` +
+        `(${Object.keys(toolsDict).length} tools registered).`,
       );
       const errorResponseEvent = createEvent({
         invocationId: invocationContext.invocationId,
@@ -328,8 +328,8 @@ export async function handleFunctionCallList({
             name: functionCall.name ?? 'unknown',
             response: {
               error: `Function '${functionCall.name}' is not available. ` +
-                `Available tools: [${availableTools}]. ` +
-                `Please use one of the available tools instead.`,
+                `Please use a different approach or pick from the tools ` +
+                `already declared in your configuration.`,
             },
           },
         }),

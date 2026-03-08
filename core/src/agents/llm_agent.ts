@@ -1487,10 +1487,13 @@ export class LlmAgent extends BaseAgent {
     event.actions.stateDelta[this.outputKey] = result;
   }
 
+  private static readonly MAX_AGENT_LOOP_ERROR_RETRIES = 2;
+
   protected async *
     runAsyncImpl(
       context: InvocationContext,
     ): AsyncGenerator<Event, void, void> {
+    let consecutiveErrors = 0;
     while (true) {
       let lastEvent: Event | undefined = undefined;
       for await (const event of this.runOneStepAsync(context)) {
@@ -1499,7 +1502,33 @@ export class LlmAgent extends BaseAgent {
         yield event;
       }
 
-      if (!lastEvent || isFinalResponse(lastEvent)) {
+      if (!lastEvent) {
+        break;
+      }
+
+      // When the LLM returns an error with no content (e.g. UNEXPECTED_TOOL_CALL,
+      // MALFORMED_FUNCTION_CALL), the event has errorCode but no function calls /
+      // text, so isFinalResponse() would treat it as "final".  Instead, retry the
+      // loop — getContents() skips content-less events so the next request is
+      // rebuilt cleanly from session history.
+      if (lastEvent.errorCode && !lastEvent.content?.parts?.length) {
+        consecutiveErrors++;
+        if (consecutiveErrors <= LlmAgent.MAX_AGENT_LOOP_ERROR_RETRIES) {
+          logger.warn(
+            `[runAsyncImpl] Error event (${lastEvent.errorCode}), ` +
+            `retrying agent loop (${consecutiveErrors}/${LlmAgent.MAX_AGENT_LOOP_ERROR_RETRIES})`,
+          );
+          continue;
+        }
+        logger.error(
+          `[runAsyncImpl] Max agent-loop error retries exhausted for ${lastEvent.errorCode}`,
+        );
+        break;
+      }
+
+      consecutiveErrors = 0;
+
+      if (isFinalResponse(lastEvent)) {
         break;
       }
       if (lastEvent.partial) {
@@ -1746,6 +1775,8 @@ export class LlmAgent extends BaseAgent {
   private static readonly LLM_TRANSIENT_ERROR_MAX_DELAY_MS = 4000;
   private static readonly LLM_RETRYABLE_ERROR_CODES = new Set([
     'UNKNOWN_ERROR',
+    'UNEXPECTED_TOOL_CALL',
+    'MALFORMED_FUNCTION_CALL',
   ]);
 
   private async *
