@@ -3,12 +3,12 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {BasePlugin, BaseTool, Event, functionsExportedForTestingOnly, FunctionTool, InvocationContext, LlmAgent, PluginManager, Session, SingleAfterToolCallback, SingleBeforeToolCallback, ToolContext,} from '@paean-ai/adk';
-import {FunctionCall} from '@google/genai';
-import {z} from 'zod';
+import { BasePlugin, BaseTool, Event, functionsExportedForTestingOnly, FunctionTool, InvocationContext, LlmAgent, PluginManager, Session, SingleAfterToolCallback, SingleBeforeToolCallback, ToolContext, } from '@paean-ai/adk';
+import { FunctionCall } from '@google/genai';
+import { z } from 'zod';
 
 // Get the test target function
-const {handleFunctionCallList} = functionsExportedForTestingOnly;
+const { handleFunctionCallList } = functionsExportedForTestingOnly;
 
 // Tool for testing
 const testTool = new FunctionTool({
@@ -16,7 +16,7 @@ const testTool = new FunctionTool({
   description: 'test tool',
   parameters: z.object({}),
   execute: async () => {
-    return {result: 'tool executed'};
+    return { result: 'tool executed' };
   },
 });
 
@@ -36,8 +36,8 @@ class TestPlugin extends BasePlugin {
   onToolErrorCallbackResponse?: Record<string, unknown>;
 
   override async beforeToolCallback(
-      ...args: Parameters<BasePlugin['beforeToolCallback']>):
-      Promise<Record<string, unknown>|undefined> {
+    ...args: Parameters<BasePlugin['beforeToolCallback']>):
+    Promise<Record<string, unknown> | undefined> {
     if (this.beforeToolCallbackResponse) {
       return this.beforeToolCallbackResponse;
     }
@@ -45,8 +45,8 @@ class TestPlugin extends BasePlugin {
   }
 
   override async afterToolCallback(
-      ...args: Parameters<BasePlugin['afterToolCallback']>):
-      Promise<Record<string, unknown>|undefined> {
+    ...args: Parameters<BasePlugin['afterToolCallback']>):
+    Promise<Record<string, unknown> | undefined> {
     if (this.afterToolCallbackResponse) {
       return this.afterToolCallbackResponse;
     }
@@ -54,8 +54,8 @@ class TestPlugin extends BasePlugin {
   }
 
   override async onToolErrorCallback(
-      ...args: Parameters<BasePlugin['onToolErrorCallback']>):
-      Promise<Record<string, unknown>|undefined> {
+    ...args: Parameters<BasePlugin['onToolErrorCallback']>):
+    Promise<Record<string, unknown> | undefined> {
     if (this.onToolErrorCallbackResponse) {
       return this.onToolErrorCallbackResponse;
     }
@@ -75,7 +75,7 @@ describe('handleFunctionCallList', () => {
 
   beforeEach(() => {
     pluginManager = new PluginManager();
-    const agent = new LlmAgent({name: 'test_agent', model: 'test_model'});
+    const agent = new LlmAgent({ name: 'test_agent', model: 'test_model' });
     invocationContext = new InvocationContext({
       invocationId: 'inv_123',
       session: {} as Session,
@@ -87,7 +87,7 @@ describe('handleFunctionCallList', () => {
       name: 'testTool',
       args: {},
     };
-    toolsDict = {'testTool': testTool};
+    toolsDict = { 'testTool': testTool };
   });
 
   it('should execute tool with no callbacks or plugins', async () => {
@@ -101,14 +101,14 @@ describe('handleFunctionCallList', () => {
     expect(event).not.toBeNull();
     let definedEvent = event as Event;
     expect((definedEvent.content!.parts![0]).functionResponse!.response)
-        .toEqual({
-          result: 'tool executed',
-        });
+      .toEqual({
+        result: 'tool executed',
+      });
   });
 
   it('should execute beforeToolCallback and return its result', async () => {
     const beforeToolCallback: SingleBeforeToolCallback = async () => {
-      return {result: 'beforeToolCallback executed'};
+      return { result: 'beforeToolCallback executed' };
     };
     const event = await handleFunctionCallList({
       invocationContext,
@@ -120,37 +120,37 @@ describe('handleFunctionCallList', () => {
     expect(event).not.toBeNull();
     let definedEvent = event as Event;
     expect((definedEvent.content!.parts![0]).functionResponse!.response)
-        .toEqual({
-          result: 'beforeToolCallback executed',
-        });
+      .toEqual({
+        result: 'beforeToolCallback executed',
+      });
   });
 
   it('should execute second beforeToolCallback if first returns undefined',
-     async () => {
-       const beforeToolCallback1: SingleBeforeToolCallback = async () => {
-         return undefined;
-       };
-       const beforeToolCallback2: SingleBeforeToolCallback = async () => {
-         return {result: 'beforeToolCallback2 executed'};
-       };
-       const event = await handleFunctionCallList({
-         invocationContext,
-         functionCalls: [functionCall],
-         toolsDict,
-         beforeToolCallbacks: [beforeToolCallback1, beforeToolCallback2],
-         afterToolCallbacks: [],
-       });
-       expect(event).not.toBeNull();
-       let definedEvent = event as Event;
-       expect((definedEvent.content!.parts![0]).functionResponse!.response)
-           .toEqual({
-             result: 'beforeToolCallback2 executed',
-           });
-     });
+    async () => {
+      const beforeToolCallback1: SingleBeforeToolCallback = async () => {
+        return undefined;
+      };
+      const beforeToolCallback2: SingleBeforeToolCallback = async () => {
+        return { result: 'beforeToolCallback2 executed' };
+      };
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [functionCall],
+        toolsDict,
+        beforeToolCallbacks: [beforeToolCallback1, beforeToolCallback2],
+        afterToolCallbacks: [],
+      });
+      expect(event).not.toBeNull();
+      let definedEvent = event as Event;
+      expect((definedEvent.content!.parts![0]).functionResponse!.response)
+        .toEqual({
+          result: 'beforeToolCallback2 executed',
+        });
+    });
 
   it('should execute afterToolCallback and return its result', async () => {
     const afterToolCallback: SingleAfterToolCallback = async () => {
-      return {result: 'afterToolCallback executed'};
+      return { result: 'afterToolCallback executed' };
     };
     const event = await handleFunctionCallList({
       invocationContext,
@@ -162,77 +162,77 @@ describe('handleFunctionCallList', () => {
     expect(event).not.toBeNull();
     let definedEvent = event as Event;
     expect((definedEvent.content!.parts![0]).functionResponse!.response)
-        .toEqual({
-          result: 'afterToolCallback executed',
-        });
+      .toEqual({
+        result: 'afterToolCallback executed',
+      });
   });
 
   it('should execute second afterToolCallback if first returns undefined',
-     async () => {
-       const afterToolCallback1: SingleAfterToolCallback = async () => {
-         return undefined;
-       };
-       const afterToolCallback2: SingleAfterToolCallback = async () => {
-         return {result: 'afterToolCallback2 executed'};
-       };
-       const event = await handleFunctionCallList({
-         invocationContext,
-         functionCalls: [functionCall],
-         toolsDict,
-         beforeToolCallbacks: [],
-         afterToolCallbacks: [afterToolCallback1, afterToolCallback2],
-       });
-       expect(event).not.toBeNull();
-       let definedEvent = event as Event;
-       expect((definedEvent.content!.parts![0]).functionResponse!.response)
-           .toEqual({
-             result: 'afterToolCallback2 executed',
-           });
-     });
+    async () => {
+      const afterToolCallback1: SingleAfterToolCallback = async () => {
+        return undefined;
+      };
+      const afterToolCallback2: SingleAfterToolCallback = async () => {
+        return { result: 'afterToolCallback2 executed' };
+      };
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [functionCall],
+        toolsDict,
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [afterToolCallback1, afterToolCallback2],
+      });
+      expect(event).not.toBeNull();
+      let definedEvent = event as Event;
+      expect((definedEvent.content!.parts![0]).functionResponse!.response)
+        .toEqual({
+          result: 'afterToolCallback2 executed',
+        });
+    });
 
   it('should execute plugin beforeToolCallback and return its result',
-     async () => {
-       const plugin = new TestPlugin('testPlugin');
-       plugin.beforeToolCallbackResponse = {
-         result: 'plugin beforeToolCallback executed'
-       };
-       pluginManager.registerPlugin(plugin);
-       const event = await handleFunctionCallList({
-         invocationContext,
-         functionCalls: [functionCall],
-         toolsDict,
-         beforeToolCallbacks: [],
-         afterToolCallbacks: [],
-       });
-       expect(event).not.toBeNull();
-       let definedEvent = event as Event;
-       expect((definedEvent.content!.parts![0]).functionResponse!.response)
-           .toEqual({
-             result: 'plugin beforeToolCallback executed',
-           });
-     });
+    async () => {
+      const plugin = new TestPlugin('testPlugin');
+      plugin.beforeToolCallbackResponse = {
+        result: 'plugin beforeToolCallback executed'
+      };
+      pluginManager.registerPlugin(plugin);
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [functionCall],
+        toolsDict,
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [],
+      });
+      expect(event).not.toBeNull();
+      let definedEvent = event as Event;
+      expect((definedEvent.content!.parts![0]).functionResponse!.response)
+        .toEqual({
+          result: 'plugin beforeToolCallback executed',
+        });
+    });
 
   it('should execute plugin afterToolCallback and return its result',
-     async () => {
-       const plugin = new TestPlugin('testPlugin');
-       plugin.afterToolCallbackResponse = {
-         result: 'plugin afterToolCallback executed'
-       };
-       pluginManager.registerPlugin(plugin);
-       const event = await handleFunctionCallList({
-         invocationContext,
-         functionCalls: [functionCall],
-         toolsDict,
-         beforeToolCallbacks: [],
-         afterToolCallbacks: [],
-       });
-       expect(event).not.toBeNull();
-       let definedEvent = event as Event;
-       expect((definedEvent.content!.parts![0]).functionResponse!.response)
-           .toEqual({
-             result: 'plugin afterToolCallback executed',
-           });
-     });
+    async () => {
+      const plugin = new TestPlugin('testPlugin');
+      plugin.afterToolCallbackResponse = {
+        result: 'plugin afterToolCallback executed'
+      };
+      pluginManager.registerPlugin(plugin);
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [functionCall],
+        toolsDict,
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [],
+      });
+      expect(event).not.toBeNull();
+      let definedEvent = event as Event;
+      expect((definedEvent.content!.parts![0]).functionResponse!.response)
+        .toEqual({
+          result: 'plugin afterToolCallback executed',
+        });
+    });
 
   it('should call plugin onToolErrorCallback when tool throws', async () => {
     const plugin = new TestPlugin('testPlugin');
@@ -248,36 +248,103 @@ describe('handleFunctionCallList', () => {
     const event = await handleFunctionCallList({
       invocationContext,
       functionCalls: [errorFunctionCall],
-      toolsDict: {'errorTool': errorTool},
+      toolsDict: { 'errorTool': errorTool },
       beforeToolCallbacks: [],
       afterToolCallbacks: [],
     });
     expect(event).not.toBeNull();
     const definedEvent = event as Event;
     expect((definedEvent.content!.parts![0]).functionResponse!.response)
-        .toEqual({
-          result: 'onToolErrorCallback executed',
-        });
+      .toEqual({
+        result: 'onToolErrorCallback executed',
+      });
   });
 
   it('should return error message when error is thrown during tool execution, when no plugin onToolErrorCallback is provided',
-     async () => {
-       const errorFunctionCall: FunctionCall = {
-         id: randomIdForTestingOnly(),
-         name: 'errorTool',
-         args: {},
-       };
+    async () => {
+      const errorFunctionCall: FunctionCall = {
+        id: randomIdForTestingOnly(),
+        name: 'errorTool',
+        args: {},
+      };
 
-       const event = await handleFunctionCallList({
-         invocationContext,
-         functionCalls: [errorFunctionCall],
-         toolsDict: {'errorTool': errorTool},
-         beforeToolCallbacks: [],
-         afterToolCallbacks: [],
-       });
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [errorFunctionCall],
+        toolsDict: { 'errorTool': errorTool },
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [],
+      });
 
-       expect(event!.content!.parts![0].functionResponse!.response).toEqual({
-         error: 'Error in tool \'errorTool\': tool error message content',
-       });
-     });
+      expect(event!.content!.parts![0].functionResponse!.response).toEqual({
+        error: 'Error in tool \'errorTool\': tool error message content',
+      });
+    });
+
+  it('should return error response for unknown tool instead of throwing',
+    async () => {
+      const unknownFunctionCall: FunctionCall = {
+        id: randomIdForTestingOnly(),
+        name: 'nonExistentTool',
+        args: {},
+      };
+
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [unknownFunctionCall],
+        toolsDict,
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [],
+      });
+
+      expect(event).not.toBeNull();
+      const definedEvent = event as Event;
+      const response =
+        definedEvent.content!.parts![0].functionResponse!.response as Record<
+          string, unknown>;
+      expect(response['error']).toBeDefined();
+      expect(response['error']).toContain('nonExistentTool');
+      expect(response['error']).toContain('not available');
+      expect(definedEvent.content!.parts![0].functionResponse!.name)
+        .toBe('nonExistentTool');
+    });
+
+  it('should still execute known tools when unknown tools are also present',
+    async () => {
+      const unknownFunctionCall: FunctionCall = {
+        id: randomIdForTestingOnly(),
+        name: 'nonExistentTool',
+        args: {},
+      };
+      const knownFunctionCall: FunctionCall = {
+        id: randomIdForTestingOnly(),
+        name: 'testTool',
+        args: {},
+      };
+
+      const event = await handleFunctionCallList({
+        invocationContext,
+        functionCalls: [unknownFunctionCall, knownFunctionCall],
+        toolsDict,
+        beforeToolCallbacks: [],
+        afterToolCallbacks: [],
+      });
+
+      expect(event).not.toBeNull();
+      const definedEvent = event as Event;
+      // Should have 2 parts: error response for unknown + success for known
+      expect(definedEvent.content!.parts!.length).toBe(2);
+
+      // First part: error for unknown tool
+      const unknownResponse =
+        definedEvent.content!.parts![0].functionResponse!.response as Record<
+          string, unknown>;
+      expect(unknownResponse['error']).toContain('nonExistentTool');
+
+      // Second part: success for known tool
+      const knownResponse =
+        definedEvent.content!.parts![1].functionResponse!.response as Record<
+          string, unknown>;
+      expect(knownResponse['result']).toBe('tool executed');
+    });
 });
