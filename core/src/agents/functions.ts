@@ -153,6 +153,9 @@ export function generateAuthEvent(
     parts.push({ functionCall: requestEucFunctionCall });
   }
 
+  if (parts.length === 0) {
+    return undefined;
+  }
   return createEvent({
     invocationId: invocationContext.invocationId,
     author: invocationContext.agent.name,
@@ -202,6 +205,9 @@ export function generateRequestConfirmationEvent({
     };
     longRunningToolIds.add(requestConfirmationFunctionCall.id!);
     parts.push({ functionCall: requestConfirmationFunctionCall });
+  }
+  if (parts.length === 0) {
+    return undefined;
   }
   return createEvent({
     invocationId: invocationContext.invocationId,
@@ -310,14 +316,14 @@ export async function handleFunctionCallList({
       },
     );
 
-    // Gracefully handle unknown tools: return an error response to the LLM
-    // so it can self-correct, instead of crashing the entire agent run.
-    // We intentionally do NOT list all available tools in the response to
-    // avoid bloating context (the tool list can be 80+ items).
     if (!toolAndContext) {
+      const argsPreview = functionCall.args
+        ? JSON.stringify(functionCall.args).substring(0, 300)
+        : '(none)';
       logger.warn(
         `Function "${functionCall.name}" not found in toolsDict ` +
-        `(${Object.keys(toolsDict).length} tools registered).`,
+        `(${Object.keys(toolsDict).length} tools registered). ` +
+        `Args: ${argsPreview}`,
       );
       const errorResponseEvent = createEvent({
         invocationId: invocationContext.invocationId,
@@ -381,6 +387,12 @@ export async function handleFunctionCallList({
           toolContext,
         );
       } catch (e: unknown) {
+        const argsPreview = JSON.stringify(functionArgs).substring(0, 500);
+        logger.error(
+          `Tool execution error: "${tool.name}" threw ${
+            e instanceof Error ? e.message : String(e)
+          }. Args: ${argsPreview}`,
+        );
         if (e instanceof Error) {
           const onToolErrorResponse =
             await invocationContext.pluginManager.runOnToolErrorCallback(
