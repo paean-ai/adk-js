@@ -844,6 +844,9 @@ async function*
   // Skip if the error count exceeds the max retry attempts
   if (codeExecutorContext.getErrorCount(invocationContext.invocationId) >=
     codeExecutor.errorRetryAttempts) {
+    logger.warn(
+      `[CodeExecutor] Pre-processor skipped: error count exceeded max retry attempts (${codeExecutor.errorRetryAttempts}) for invocation ${invocationContext.invocationId}`,
+    );
     return;
   }
 
@@ -959,6 +962,9 @@ async function*
   // Skip if the error count exceeds the max retry attempts
   if (codeExecutorContext.getErrorCount(invocationContext.invocationId) >=
     codeExecutor.errorRetryAttempts) {
+    logger.warn(
+      `[CodeExecutor] Post-processor skipped: error count exceeded max retry attempts (${codeExecutor.errorRetryAttempts}) for invocation ${invocationContext.invocationId}`,
+    );
     return;
   }
 
@@ -1859,12 +1865,12 @@ export class LlmAgent extends BaseAgent {
         if (attempt > 0) {
           const delay = Math.min(
             LlmAgent.LLM_TRANSIENT_ERROR_BASE_DELAY_MS *
-              Math.pow(2, attempt - 1),
+            Math.pow(2, attempt - 1),
             LlmAgent.LLM_TRANSIENT_ERROR_MAX_DELAY_MS,
           );
           logger.warn(
             `[callLlmAsync] Retrying LLM call after transient error ` +
-              `(attempt ${attempt + 1}/${maxRetries + 1}), waiting ${delay}ms`,
+            `(attempt ${attempt + 1}/${maxRetries + 1}), waiting ${delay}ms`,
           );
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -1892,9 +1898,9 @@ export class LlmAgent extends BaseAgent {
             shouldRetry = true;
             logger.warn(
               `[callLlmAsync] Transient LLM error: ${llmResponse.errorCode}` +
-                `${llmResponse.errorMessage ? ': ' + llmResponse.errorMessage : ''}, ` +
-                `finishReason: ${llmResponse.finishReason || 'none'}, ` +
-                `usage: ${JSON.stringify(llmResponse.usageMetadata)}`,
+              `${llmResponse.errorMessage ? ': ' + llmResponse.errorMessage : ''}, ` +
+              `finishReason: ${llmResponse.finishReason || 'none'}, ` +
+              `usage: ${JSON.stringify(llmResponse.usageMetadata)}`,
             );
             break;
           }
@@ -2012,8 +2018,7 @@ export class LlmAgent extends BaseAgent {
             };
           } catch {
             logger.warn(
-              `LLM error message is not valid JSON, using raw message: ${
-                modelError.message.substring(0, 200)
+              `LLM error message is not valid JSON, using raw message: ${modelError.message.substring(0, 200)
               }`,
             );
             yield {

@@ -703,6 +703,29 @@ export class Gemini extends BaseLlm {
           }
         }
       }
+
+      // Gemini API (AI Studio) does not allow combining built-in tools
+      // (googleSearch / googleSearchRetrieval) with custom function calling
+      // tools in the same request. When both are present, drop the built-in
+      // search tool so the agent's custom tools remain functional.
+      if (llmRequest.config?.tools && llmRequest.config.tools.length > 1) {
+        const hasBuiltInSearch = llmRequest.config.tools.some(
+          (t) => 'googleSearch' in t || 'googleSearchRetrieval' in t,
+        );
+        const hasFunctionDeclarations = llmRequest.config.tools.some(
+          (t) => 'functionDeclarations' in t,
+        );
+        if (hasBuiltInSearch && hasFunctionDeclarations) {
+          logger.warn(
+            'Gemini API (AI Studio) does not support combining built-in search ' +
+              'tools with custom function declarations. Removing built-in search ' +
+              'tool from this request.',
+          );
+          llmRequest.config.tools = llmRequest.config.tools.filter(
+            (t) => !('googleSearch' in t) && !('googleSearchRetrieval' in t),
+          );
+        }
+      }
     }
   }
 }

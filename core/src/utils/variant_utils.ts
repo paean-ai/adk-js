@@ -43,5 +43,5 @@ function getBooleanEnvVar(envVar: string): boolean {
 
   const envVarValue = (process.env[envVar] || '').toLowerCase();
 
-  return ['true', '1'].includes(envVar.toLowerCase());
+  return ['true', '1'].includes(envVarValue);
 }
