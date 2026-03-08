@@ -708,6 +708,8 @@ export class Gemini extends BaseLlm {
       // (googleSearch / googleSearchRetrieval) with custom function calling
       // tools in the same request. When both are present, drop the built-in
       // search tool so the agent's custom tools remain functional.
+      // To provide search capability on AI Studio, use a custom FunctionTool
+      // that makes a separate Gemini API call with only googleSearch enabled.
       if (llmRequest.config?.tools && llmRequest.config.tools.length > 1) {
         const hasBuiltInSearch = llmRequest.config.tools.some(
           (t) => 'googleSearch' in t || 'googleSearchRetrieval' in t,
