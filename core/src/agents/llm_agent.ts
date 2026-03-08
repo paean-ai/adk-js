@@ -1684,6 +1684,7 @@ export class LlmAgent extends BaseAgent {
       const allEmpty = llmResponse.content.parts.every(
         (p: any) => {
           if (p.functionCall || p.functionResponse || p.executableCode || p.codeExecutionResult) return false;
+          if (p.inlineData || p.fileData) return false;
           if ('text' in p && typeof p.text === 'string' && p.text.length > 0) return false;
           return true;
         },

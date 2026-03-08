@@ -51,6 +51,10 @@ export interface GeminiParams {
   /**
    * The API key to use for the Gemini API. If not provided, it will look for
    * the GOOGLE_GENAI_API_KEY or GEMINI_API_KEY environment variable.
+   *
+   * Alternatively, set AI_STUDIO_API_KEY env var to force all models
+   * (including Gemini 3 preview) through the standard AI Studio endpoint
+   * (generativelanguage.googleapis.com) instead of aiplatform.googleapis.com.
    */
   apiKey?: string;
   /**
@@ -119,13 +123,23 @@ export class Gemini extends BaseLlm {
 
     const canReadEnv = typeof process === 'object';
 
+    // AI Studio API key takes precedence: when set, we skip the Gemini 3
+    // aiplatform.googleapis.com endpoint and use standard AI Studio
+    // (generativelanguage.googleapis.com) instead. This avoids the higher
+    // latency / stricter QPS limits of the AI Platform endpoint.
+    const aiStudioApiKey = canReadEnv
+      ? process.env['AI_STUDIO_API_KEY']
+      : undefined;
+    const useAiStudioMode = !!aiStudioApiKey;
+
     // Handle API endpoint configuration
     this.apiEndpoint = apiEndpoint;
     if (!this.apiEndpoint && canReadEnv) {
       this.apiEndpoint = process.env['GEMINI_API_ENDPOINT'];
     }
-    // For Gemini 3 preview models, use the aiplatform.googleapis.com endpoint by default
-    if (!this.apiEndpoint && this.isGemini3Preview) {
+    // For Gemini 3 preview models, use the aiplatform.googleapis.com endpoint
+    // by default — unless AI Studio mode is active.
+    if (!this.apiEndpoint && this.isGemini3Preview && !useAiStudioMode) {
       this.apiEndpoint = GEMINI3_PREVIEW_API_ENDPOINT;
       logger.info(`Using Gemini 3 preview endpoint: ${this.apiEndpoint}`);
     }
@@ -138,6 +152,17 @@ export class Gemini extends BaseLlm {
         useVertexAI =
           vertexAIfromEnv.toLowerCase() === 'true' || vertexAIfromEnv === '1';
       }
+    }
+
+    // AI Studio mode forces non-Vertex AI path with the AI Studio key
+    if (useAiStudioMode) {
+      if (useVertexAI) {
+        logger.info(
+          'AI_STUDIO_API_KEY set — overriding Vertex AI mode to use AI Studio (generativelanguage.googleapis.com)',
+        );
+      }
+      useVertexAI = false;
+      this.apiKey = aiStudioApiKey;
     }
 
     // For Gemini 3 preview models, force API key mode instead of Vertex AI.
@@ -401,10 +426,10 @@ export class Gemini extends BaseLlm {
         // model delays (~190s) on the subsequent LLM call.
         if (hasFunctionCalls) {
           if (pendingFCResponse && pendingFCResponse.content?.parts) {
-            const newFCParts = (llmResponse.content?.parts || []).filter(
-              (p) => p.functionCall,
+            const newParts = (llmResponse.content?.parts || []).filter(
+              (p) => p.functionCall || p.thoughtSignature,
             );
-            pendingFCResponse.content.parts.push(...newFCParts);
+            pendingFCResponse.content.parts.push(...newParts);
             pendingFCResponse.usageMetadata = llmResponse.usageMetadata;
           } else {
             pendingFCResponse = llmResponse;
@@ -431,7 +456,14 @@ export class Gemini extends BaseLlm {
           const partsWithSig = pendingFCResponse.content.parts.filter(
             (p) => p.thoughtSignature,
           ).length;
-          if (partsWithSig === 0) {
+          if (partsWithSig === 0 && thoughtSignature) {
+            for (const part of pendingFCResponse.content.parts) {
+              if (part.functionCall) {
+                part.thoughtSignature = thoughtSignature;
+                break;
+              }
+            }
+          } else if (partsWithSig === 0) {
             logger.warn(
               `[Gemini3] No thoughtSignature on merged function call parts — may cause 400 on next request`,
             );

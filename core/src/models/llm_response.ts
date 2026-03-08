@@ -105,6 +105,16 @@ export function createLlmResponse(
       };
     }
 
+    // STOP with empty/no parts is a normal trailing chunk (common with
+    // Gemini 3 streaming) — not an error. Return it without errorCode so
+    // the agent loop does not retry or surface a spurious error event.
+    if (candidate.finishReason === FinishReason.STOP) {
+      return {
+        usageMetadata: usageMetadata,
+        finishReason: candidate.finishReason,
+      };
+    }
+
     return {
       errorCode: candidate.finishReason,
       errorMessage: candidate.finishMessage,
