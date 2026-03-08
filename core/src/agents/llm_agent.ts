@@ -1665,12 +1665,12 @@ export class LlmAgent extends BaseAgent {
       return;
     }
 
-    // Some models (e.g. gemini-3.1-flash-lite-preview) emit a trailing
-    // streaming chunk after a function-call chunk that has content with only
-    // an empty text part (and optionally a thoughtSignature).  This empty
-    // "echo" would be treated as a final response by the agent loop, cutting
-    // the loop short before the tool results are sent back for a real answer.
-    // Skip such empty responses so the agent loop continues correctly.
+    // Gemini models (flash-lite, flash, and potentially others) sometimes
+    // emit a trailing streaming chunk after a function-call chunk that
+    // contains only empty text parts (and optionally a thoughtSignature).
+    // Without this guard, isFinalResponse() treats such chunks as a valid
+    // final response, terminating the agent loop before tool results are
+    // sent back.  This is model-agnostic — skip any empty response.
     if (llmResponse.content?.parts?.length && !llmResponse.errorCode) {
       const allEmpty = llmResponse.content.parts.every(
         (p: any) => {
