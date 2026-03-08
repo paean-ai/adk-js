@@ -1586,14 +1586,26 @@ export class LlmAgent extends BaseAgent {
     for await (const llmResponse of this.callLlmAsync(
       invocationContext, llmRequest, modelResponseEvent)) {
       // ======================================================================
-      // Postprocess after calling the LLM
+      // Postprocess after calling the LLM (wrapped to prevent stream crashes)
       // ======================================================================
-      for await (const event of this.postprocess(
-        invocationContext, llmRequest, llmResponse, modelResponseEvent)) {
-        // Update the mutable event id to avoid conflict
-        modelResponseEvent.id = createNewEventId();
-        modelResponseEvent.timestamp = new Date().getTime();
-        yield event;
+      try {
+        for await (const event of this.postprocess(
+          invocationContext, llmRequest, llmResponse, modelResponseEvent)) {
+          modelResponseEvent.id = createNewEventId();
+          modelResponseEvent.timestamp = new Date().getTime();
+          yield event;
+        }
+      } catch (postprocessError: unknown) {
+        const errMsg = postprocessError instanceof Error
+          ? postprocessError.message : String(postprocessError);
+        logger.error(`Postprocess error: ${errMsg}`);
+        yield createEvent({
+          invocationId: invocationContext.invocationId,
+          author: this.name,
+          branch: invocationContext.branch,
+          errorCode: 'POSTPROCESS_ERROR',
+          errorMessage: errMsg,
+        });
       }
     }
   }
@@ -1640,31 +1652,12 @@ export class LlmAgent extends BaseAgent {
         mergedEvent.longRunningToolIds = Array.from(
           getLongRunningFunctionCalls(functionCalls, llmRequest.toolsDict));
 
-        // Logging for Gemini 3 thoughtSignature tracking
-        const hasThought = mergedEvent.content.parts?.some(p => p.thought);
         const hasSignature = mergedEvent.content.parts?.some(
           p => p.thoughtSignature,
         );
-        logger.info(
-          `[postprocess] Function call event: ${functionCalls.length} calls, ` +
-            `hasThought=${hasThought}, hasSignature=${hasSignature}`,
-        );
-        for (let i = 0; i < (mergedEvent.content.parts?.length || 0); i++) {
-          const part = mergedEvent.content.parts![i];
-          if (part.functionCall || part.thought) {
-            logger.info(
-              `[postprocess]   Part ${i}: thought=${!!part.thought}, ` +
-                `functionCall=${part.functionCall?.name || 'none'}, ` +
-                `hasSignature=${!!part.thoughtSignature}`,
-            );
-          }
-        }
-        
-        // CRITICAL: Warn if function calls present but no signature
         if (!hasSignature) {
           logger.warn(
-            `[postprocess] WARNING: Event has function calls but NO thoughtSignature! ` +
-            `This will cause 400 errors when this content is sent back to Gemini 3.`,
+            `[postprocess] Function calls (${functionCalls.length}) without thoughtSignature`,
           );
         }
       }
@@ -1935,14 +1928,27 @@ export class LlmAgent extends BaseAgent {
         if (onModelErrorCallbackResponse) {
           yield onModelErrorCallbackResponse;
         } else {
-          // If no plugins, just return the message.
-          const errorResponse = JSON.parse(modelError.message) as
-            { error: { code: number; message: string; } };
+          // Try to parse as structured JSON error; fall back to raw message
+          // for non-JSON errors (e.g. Gemini 3 Preview "exception ..." strings).
+          try {
+            const errorResponse = JSON.parse(modelError.message) as
+              { error: { code: number; message: string; } };
 
-          yield {
-            errorCode: String(errorResponse.error.code),
-            errorMessage: errorResponse.error.message,
-          };
+            yield {
+              errorCode: String(errorResponse.error.code),
+              errorMessage: errorResponse.error.message,
+            };
+          } catch {
+            logger.warn(
+              `LLM error message is not valid JSON, using raw message: ${
+                modelError.message.substring(0, 200)
+              }`,
+            );
+            yield {
+              errorCode: 'UNKNOWN_ERROR',
+              errorMessage: modelError.message,
+            };
+          }
         }
       } else {
         logger.error('Unknown error during response generation', modelError);
