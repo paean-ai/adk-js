@@ -1507,21 +1507,21 @@ export class LlmAgent extends BaseAgent {
       }
 
       // When the LLM returns an error with no content (e.g. UNEXPECTED_TOOL_CALL,
-      // MALFORMED_FUNCTION_CALL), the event has errorCode but no function calls /
-      // text, so isFinalResponse() would treat it as "final".  Instead, retry the
-      // loop — getContents() skips content-less events so the next request is
-      // rebuilt cleanly from session history.
+      // MALFORMED_FUNCTION_CALL), isFinalResponse() would treat it as "final".
+      // Retry the loop so the model can self-correct.  The error event is still
+      // yielded above so consumers (API layer) can log/stream it to the client.
       if (lastEvent.errorCode && !lastEvent.content?.parts?.length) {
         consecutiveErrors++;
         if (consecutiveErrors <= LlmAgent.MAX_AGENT_LOOP_ERROR_RETRIES) {
           logger.warn(
-            `[runAsyncImpl] Error event (${lastEvent.errorCode}), ` +
+            `[runAsyncImpl] Error event (${lastEvent.errorCode}: ${lastEvent.errorMessage || 'no message'}), ` +
             `retrying agent loop (${consecutiveErrors}/${LlmAgent.MAX_AGENT_LOOP_ERROR_RETRIES})`,
           );
           continue;
         }
         logger.error(
-          `[runAsyncImpl] Max agent-loop error retries exhausted for ${lastEvent.errorCode}`,
+          `[runAsyncImpl] Max agent-loop error retries exhausted for ` +
+          `${lastEvent.errorCode}: ${lastEvent.errorMessage || 'no message'}`,
         );
         break;
       }
@@ -1665,13 +1665,22 @@ export class LlmAgent extends BaseAgent {
       return;
     }
 
-    // Gemini models (flash-lite, flash, and potentially others) sometimes
-    // emit a trailing streaming chunk after a function-call chunk that
-    // contains only empty text parts (and optionally a thoughtSignature).
-    // Without this guard, isFinalResponse() treats such chunks as a valid
-    // final response, terminating the agent loop before tool results are
-    // sent back.  This is model-agnostic — skip any empty response.
-    if (llmResponse.content?.parts?.length && !llmResponse.errorCode) {
+    // Guard: skip streaming chunks with no meaningful content.
+    //
+    // Gemini models emit trailing chunks after function-call chunks that
+    // contain either zero parts or only empty/thoughtSignature-only parts.
+    // Without this guard:
+    //   - Zero-parts chunks get persisted to the session, polluting it with
+    //     empty events that must be cleaned up on subsequent turns.
+    //   - Empty-text-only chunks cause isFinalResponse() to treat them as
+    //     valid final responses, terminating the agent loop prematurely.
+    if (llmResponse.content && !llmResponse.errorCode) {
+      if (!llmResponse.content.parts || llmResponse.content.parts.length === 0) {
+        logger.debug(
+          `[postprocess] Skipping LLM response with no parts (role=${llmResponse.content.role})`,
+        );
+        return;
+      }
       const allEmpty = llmResponse.content.parts.every(
         (p: any) => {
           if (p.functionCall || p.functionResponse || p.executableCode || p.codeExecutionResult) return false;
@@ -1713,6 +1722,10 @@ export class LlmAgent extends BaseAgent {
         }
       }
     }
+    logger.debug(
+      `[postprocess] Yielding mergedEvent: role=${mergedEvent.content?.role}, parts=${mergedEvent.content?.parts?.length}, ` +
+      `hasFCs=${getFunctionCalls(mergedEvent)?.length || 0}, partial=${mergedEvent.partial}`,
+    );
     yield mergedEvent;
 
     // =========================================================================
@@ -1756,6 +1769,9 @@ export class LlmAgent extends BaseAgent {
     }
 
     // Yields the function response event.
+    logger.debug(
+      `[postprocess] Yielding functionResponseEvent: role=${functionResponseEvent.content?.role}, parts=${functionResponseEvent.content?.parts?.length}`,
+    );
     yield functionResponseEvent;
 
     // If model instruct to transfer to an agent, run the transferred agent.
@@ -1874,7 +1890,9 @@ export class LlmAgent extends BaseAgent {
           ) {
             shouldRetry = true;
             logger.warn(
-              `[callLlmAsync] Transient LLM error: ${llmResponse.errorCode}, ` +
+              `[callLlmAsync] Transient LLM error: ${llmResponse.errorCode}` +
+                `${llmResponse.errorMessage ? ': ' + llmResponse.errorMessage : ''}, ` +
+                `finishReason: ${llmResponse.finishReason || 'none'}, ` +
                 `usage: ${JSON.stringify(llmResponse.usageMetadata)}`,
             );
             break;
