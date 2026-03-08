@@ -1665,6 +1665,28 @@ export class LlmAgent extends BaseAgent {
       return;
     }
 
+    // Some models (e.g. gemini-3.1-flash-lite-preview) emit a trailing
+    // streaming chunk after a function-call chunk that has content with only
+    // an empty text part (and optionally a thoughtSignature).  This empty
+    // "echo" would be treated as a final response by the agent loop, cutting
+    // the loop short before the tool results are sent back for a real answer.
+    // Skip such empty responses so the agent loop continues correctly.
+    if (llmResponse.content?.parts?.length && !llmResponse.errorCode) {
+      const allEmpty = llmResponse.content.parts.every(
+        (p: any) => {
+          if (p.functionCall || p.functionResponse || p.executableCode || p.codeExecutionResult) return false;
+          if ('text' in p && typeof p.text === 'string' && p.text.length > 0) return false;
+          return true;
+        },
+      );
+      if (allEmpty) {
+        logger.debug(
+          `[postprocess] Skipping empty-content LLM response (${llmResponse.content.parts.length} empty parts)`,
+        );
+        return;
+      }
+    }
+
     // Merge llm response with model response event.
     const mergedEvent = createEvent({
       ...modelResponseEvent,
