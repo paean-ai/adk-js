@@ -253,6 +253,7 @@ export class Gemini extends BaseLlm {
       let text = '';
       let usageMetadata;
       let lastResponse: GenerateContentResponse | undefined;
+      let pendingFCResponse: LlmResponse | null = null;
 
       // TODO - b/425992518: verify the type of streaming response is correct.
       for await (const response of streamResult) {
@@ -288,7 +289,16 @@ export class Gemini extends BaseLlm {
           } else {
             text += firstPart.text;
           }
-          llmResponse.partial = true;
+
+          // Only mark as partial when this is a text-only streaming chunk.
+          // Chunks that contain function calls are complete agent-loop steps
+          // and MUST be persisted to the session by the runner. Marking them
+          // as partial causes the runner to skip appendEvent, leaving the
+          // session with a function response that has no matching function
+          // call — corrupting the conversation history for the next LLM call.
+          if (!hasFunctionCalls) {
+            llmResponse.partial = true;
+          }
 
           // For Gemini 3: If this chunk contains BOTH thought AND function calls,
           // the response already has the complete structure. Clear accumulated text
@@ -382,19 +392,55 @@ export class Gemini extends BaseLlm {
               }
             }
           }
+        }
 
-          const partsWithSig = llmResponse.content.parts.filter(
-            (p) => p.thoughtSignature,
-          ).length;
-          if (partsWithSig === 0) {
-            logger.warn(
-              `[Gemini3] No thoughtSignature on function call parts — may cause 400 on next request`,
+        // Buffer function-call chunks to merge parallel calls that Gemini 3
+        // may send across separate streaming chunks. Split function calls
+        // cause interleaved FC→FR→FC→FR session history instead of the
+        // correct parallel FC(all)→FR(all), which can trigger pathological
+        // model delays (~190s) on the subsequent LLM call.
+        if (hasFunctionCalls) {
+          if (pendingFCResponse && pendingFCResponse.content?.parts) {
+            const newFCParts = (llmResponse.content?.parts || []).filter(
+              (p) => p.functionCall,
             );
+            pendingFCResponse.content.parts.push(...newFCParts);
+            pendingFCResponse.usageMetadata = llmResponse.usageMetadata;
+          } else {
+            pendingFCResponse = llmResponse;
           }
+          continue;
+        }
+
+        // While buffering FC chunks, skip empty trailing chunks
+        if (pendingFCResponse) {
+          if (!llmResponse.content?.parts?.length) {
+            continue;
+          }
+          // Non-empty, non-FC chunk arrived: flush buffered function calls
+          yield pendingFCResponse;
+          pendingFCResponse = null;
         }
 
         yield llmResponse;
       }
+
+      // Flush any buffered function call response
+      if (pendingFCResponse) {
+        if (this.isGemini3Preview && pendingFCResponse.content?.parts) {
+          const partsWithSig = pendingFCResponse.content.parts.filter(
+            (p) => p.thoughtSignature,
+          ).length;
+          if (partsWithSig === 0) {
+            logger.warn(
+              `[Gemini3] No thoughtSignature on merged function call parts — may cause 400 on next request`,
+            );
+          }
+        }
+        yield pendingFCResponse;
+        pendingFCResponse = null;
+      }
+
       if (
         (text || thoughtText) &&
         lastResponse?.candidates?.[0]?.finishReason === FinishReason.STOP
