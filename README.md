@@ -1,50 +1,53 @@
-# Agent Development Kit (ADK) for TypeScript
+# Agent Development Kit (ADK) for TypeScript — Paean Fork
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![NPM Version](https://img.shields.io/npm/v/@paean-ai/adk)](https://www.npmjs.com/package/@paean-ai/adk)
-[![r/agentdevelopmentkit](https://img.shields.io/badge/Reddit-r%2Fagentdevelopmentkit-FF4500?style=flat&logo=reddit&logoColor=white)](https://www.reddit.com/r/agentdevelopmentkit/)
 
 <html>
     <h2 align="center">
       <img src="https://raw.githubusercontent.com/google/adk-python/main/assets/agent-development-kit.png" width="256"/>
     </h2>
     <h3 align="center">
-      An open-source, code-first TypeScript toolkit for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
-    </h3>
-    <h3 align="center">
-      Important Links:
-      <a href="https://google.github.io/adk-docs/">Docs</a>,
-      <a href="https://github.com/google/adk-samples">Samples</a>,
-      <a href="https://github.com/google/adk-python">Python ADK</a>.
-      <a href="https://github.com/google/adk-java">Java ADK</a>,
-      <a href="https://github.com/google/adk-go">Go ADK</a> &
-      <a href="https://github.com/google/adk-web">Web ADK</a>.
+      A hard fork of <a href="https://github.com/google/adk-node">Google's ADK for Node.js</a>, maintained by Paean AI with production-hardened fixes for Gemini 3 / 3.1 models.
     </h3>
 </html>
 
-Agent Development Kit (ADK) is designed for developers seeking fine-grained
-control and flexibility when building advanced AI agents that are tightly
-integrated with services in Google Cloud. It allows you to define agent
-behavior, orchestration, and tool use directly in code, enabling robust
-debugging, versioning, and deployment anywhere – from your laptop to the cloud.
+Published as **`@paean-ai/adk`** on npm.
 
 --------------------------------------------------------------------------------
 
-## ✨ Key Features
+## Why This Fork Exists
 
--   **Rich Tool Ecosystem**: Utilize pre-built tools, custom functions, OpenAPI
-    specs, or integrate existing tools to give agents diverse capabilities, all
-    for tight integration with the Google ecosystem.
+Google's upstream ADK (`@google/adk`) targets general Gemini 2.x usage. When we
+adopted Gemini 3 and later Gemini 3.1 models in production at Paean, we hit
+several issues that required deep runtime changes. Rather than maintain an
+ever-growing patch stack, we hard-forked the repository so we can iterate
+freely while still giving back fixes that apply upstream.
 
--   **Code-First Development**: Define agent logic, tools, and orchestration
-    directly in TypeScript for ultimate flexibility, testability, and versioning.
+### Key Differences from Upstream
 
--   **Modular Multi-Agent Systems**: Design scalable applications by composing
-    multiple specialized agents into flexible hierarchies.
+| Area | Upstream (`@google/adk`) | Paean Fork (`@paean-ai/adk`) |
+|------|--------------------------|-------------------------------|
+| Gemini 3 function call names | Not handled | Resolves `tool_name:method_name` colon-separated format (e.g. `google_search:search` → `google_search`) |
+| Empty-content streaming chunks | Treated as final response, breaking the agent loop | Detected and skipped — prevents premature loop termination with `gemini-3.1-flash-lite-preview` and similar models |
+| Unknown tool calls | Crashes the agent run | Returns a graceful error response so the LLM can self-correct; agent continues |
+| Error retry in agent loop | No retry on `UNEXPECTED_TOOL_CALL` / `MALFORMED_FUNCTION_CALL` | Up to 2 automatic retries with `consecutiveErrors` tracking before giving up |
+| `thoughtSignature` handling | Basic | Enhanced propagation across multi-turn conversations to maintain reasoning chains in Gemini 3 |
+| Cross-user state contamination | Possible when reusing model instances | Fixed — each conversation gets a fresh `Gemini` instance to prevent `cachedThoughtSignature` leakage |
+| Transient `UNKNOWN_ERROR` | No retry | Automatic retry with backoff for transient LLM failures |
 
-## 🚀 Installation
+## Gemini 3 / 3.1 Support
 
-If you're using npm, add the following to your dependencies:
+This fork is tested in production with:
+
+- `gemini-3-flash-preview`
+- `gemini-3.1-flash-lite-preview`
+- `gemini-3.1-pro-preview`
+
+All function-calling, streaming, multi-turn, and tool-orchestration paths have
+been validated with 100+ registered tools in a single agent context.
+
+## Installation
 
 ```bash
 npm install @paean-ai/adk
@@ -56,75 +59,91 @@ Or with yarn:
 yarn add @paean-ai/adk
 ```
 
-## 📚 Documentation
-
-For building, evaluating, and deploying agents by follow the TypeScript
-documentation & samples:
-
-*   **[Documentation](https://google.github.io/adk-docs)**
-*   **[Samples](https://github.com/google/adk-samples)**
-
-## 🏁 Feature Highlight
-
-### Same Features & Familiar Interface As Other ADKs:
+## Quick Start
 
 ```typescript
-import { LlmAgent, GOOGLE_SEARCH } from '@paean-ai/adk';
+import { LlmAgent, Gemini, GOOGLE_SEARCH } from '@paean-ai/adk';
 
-const rootAgent = new LlmAgent({
+const agent = new LlmAgent({
     name: 'search_assistant',
-    description: 'An assistant that can search the web.',
-    model: 'gemini-2.5-flash', // Or your preferred models
-    instruction: 'You are a helpful assistant. Answer user questions using Google Search when needed.',
+    model: new Gemini({ model: 'gemini-3-flash-preview' }),
+    instruction: 'You are a helpful assistant.',
     tools: [GOOGLE_SEARCH],
 });
 ```
 
-### Development UI
+## Paean-Specific Fixes in Detail
 
-Same as the Python Development UI.
-A built-in development UI to help you test, evaluate, debug, and showcase your agent(s).
-<img src="https://raw.githubusercontent.com/google/adk-python/main/assets/adk-web-dev-ui-function-call.png"/>
+### 1. Gemini 3 Colon-Separated Function Names
 
-### Evaluate Agents
+Gemini 3 models sometimes return function call names in `tool_name:method_name`
+format. The `resolveToolName()` helper in `core/src/agents/functions.ts` strips
+the suffix and falls back to the base tool name:
 
-Coming soon...
+```
+Model returns: "google_search:search"
+Tool registered as: "google_search"
+→ Resolved successfully via colon-fallback
+```
 
-## 🤖 A2A and ADK integration
+### 2. Empty-Content Streaming Chunk Guard
 
-For remote agent-to-agent communication, ADK integrates with the
-[A2A protocol](https://github.com/google/A2A/).
-Examples coming soon...
+`gemini-3.1-flash-lite-preview` emits a trailing streaming chunk after
+function-call chunks that contains only an empty text part. Without the guard,
+`isFinalResponse()` treats this as a valid final response, cutting the agent
+loop short before tool results are sent back. The fix in
+`LlmAgent.postprocess()` detects and skips these empty chunks:
 
-## 🏗️ Building the Project
+```typescript
+// core/src/agents/llm_agent.ts — postprocess()
+const allEmpty = llmResponse.content.parts.every((p) => {
+  if (p.functionCall || p.functionResponse || ...) return false;
+  if ('text' in p && typeof p.text === 'string' && p.text.length > 0) return false;
+  return true;
+});
+if (allEmpty) return; // Skip — let the agent loop continue
+```
 
-This project uses `esbuild` to compile and bundle the TypeScript source code.
-You can build the project using the following npm scripts:
+### 3. Graceful Unknown-Tool Handling
 
-*   `npm run build`: Compiles the TypeScript code into CommonJS, ESM, and Web formats in the `dist` directory.
-*   `npm run build:bundle`: Creates bundled versions of the output for easier distribution or use in environments that don't support tree-shaking well.
-*   `npm run build:watch`: Watches for changes in the source files and automatically rebuilds the project for ESM format only.
+When the LLM hallucinates a tool name that doesn't exist in `toolsDict`, instead
+of throwing and crashing the entire agent run, we return a structured error
+response so the model can self-correct:
 
-## 🤝 Contributing
+```
+Function 'nonExistentTool' is not available.
+Please use a different approach or pick from the tools already declared in your configuration.
+```
 
-We welcome contributions from the community! Whether it's bug reports, feature requests, documentation improvements, or code contributions, please see our
-- [General contribution guideline and flow](https://google.github.io/adk-docs/contributing-guide/).
-- Then if you want to contribute code, please read [Code Contributing Guidelines](./CONTRIBUTING.md) to get started.
+### 4. Agent-Loop Error Retry
 
-## 📄 License
+Content-less error events (`UNEXPECTED_TOOL_CALL`, `MALFORMED_FUNCTION_CALL`) are
+retried up to 2 times before giving up. This prevents a single bad model
+response from terminating the entire conversation.
 
-This project is licensed under the Apache 2.0 License - see the
+## Documentation
+
+For general ADK concepts, refer to the upstream documentation:
+
+- **[ADK Documentation](https://google.github.io/adk-docs)**
+- **[ADK Samples](https://github.com/google/adk-samples)**
+- **[Upstream JS ADK](https://github.com/google/adk-node)**
+
+## Building
+
+```bash
+npm run build          # Compile to CJS, ESM, and Web
+npm run build:watch    # Watch mode (ESM only)
+```
+
+## License
+
+This project is licensed under the Apache 2.0 License — see the
 [LICENSE](LICENSE) file for details.
 
-## Preview
-
-This feature is subject to the "Pre-GA Offerings Terms" in the General Service
-Terms section of the
-[Service Specific Terms](https://cloud.google.com/terms/service-terms#1). Pre-GA
-features are available "as is" and might have limited support. For more
-information, see the
-[launch stage descriptions](https://cloud.google.com/products?hl=en#product-launch-stages).
+Forked from [google/adk-node](https://github.com/google/adk-node). Original
+work copyright Google LLC.
 
 --------------------------------------------------------------------------------
 
-*Happy Agent Building!*
+*Built for production. Hardened for Gemini 3.*
