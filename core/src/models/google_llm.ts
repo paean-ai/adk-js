@@ -75,14 +75,20 @@ export interface GeminiParams {
    */
   headers?: Record<string, string>;
   /**
-   * Custom API endpoint URL. If not provided, uses the default endpoint
-   * based on the model type:
-   * - Gemini 3 preview models: aiplatform.googleapis.com
-   * - Other models: uses SDK default (generativelanguage.googleapis.com)
+   * Custom API endpoint for non-preview models
+   * (replaces generativelanguage.googleapis.com).
    *
-   * Can also be set via GEMINI_API_ENDPOINT environment variable.
+   * Env: GEMINI_API_ENDPOINT
    */
   apiEndpoint?: string;
+  /**
+   * Custom API endpoint for Gemini 3 preview models
+   * (replaces aiplatform.googleapis.com).
+   * The SDK will append /v1/publishers/google automatically.
+   *
+   * Env: GEMINI_VERTEX_API_ENDPOINT
+   */
+  vertexApiEndpoint?: string;
 }
 
 /**
@@ -95,6 +101,7 @@ export class Gemini extends BaseLlm {
   private readonly location?: string;
   private readonly headers?: Record<string, string>;
   private readonly apiEndpoint?: string;
+  private readonly vertexApiEndpoint?: string;
   private readonly isGemini3Preview: boolean;
 
   /**
@@ -108,6 +115,7 @@ export class Gemini extends BaseLlm {
     location,
     headers,
     apiEndpoint,
+    vertexApiEndpoint,
   }: GeminiParams) {
     if (!model) {
       model = 'gemini-2.5-flash';
@@ -132,16 +140,22 @@ export class Gemini extends BaseLlm {
       : undefined;
     const useAiStudioMode = !!aiStudioApiKey;
 
-    // Handle API endpoint configuration
+    // Non-preview endpoint (generativelanguage.googleapis.com proxy)
     this.apiEndpoint = apiEndpoint;
     if (!this.apiEndpoint && canReadEnv) {
       this.apiEndpoint = process.env['GEMINI_API_ENDPOINT'];
     }
-    // For Gemini 3 preview models, use the aiplatform.googleapis.com endpoint
-    // by default — unless AI Studio mode is active.
-    if (!this.apiEndpoint && this.isGemini3Preview && !useAiStudioMode) {
-      this.apiEndpoint = GEMINI3_PREVIEW_API_ENDPOINT;
-      logger.info(`Using Gemini 3 preview endpoint: ${this.apiEndpoint}`);
+
+    // Vertex endpoint (aiplatform.googleapis.com proxy) for Gemini 3 preview
+    this.vertexApiEndpoint = vertexApiEndpoint;
+    if (!this.vertexApiEndpoint && canReadEnv) {
+      this.vertexApiEndpoint = process.env['GEMINI_VERTEX_API_ENDPOINT'];
+    }
+    if (!this.vertexApiEndpoint && this.isGemini3Preview && !useAiStudioMode) {
+      this.vertexApiEndpoint = GEMINI3_PREVIEW_API_ENDPOINT;
+      logger.info(
+        `Using Gemini 3 preview endpoint: ${this.vertexApiEndpoint}`,
+      );
     }
 
     // Determine vertexai mode from constructor or environment
@@ -565,24 +579,24 @@ export class Gemini extends BaseLlm {
         httpOptions: {headers: combinedHeaders},
       });
     } else {
-      // Build httpOptions with optional baseUrl for Gemini 3 preview models
       const httpOptions: Record<string, unknown> = {headers: combinedHeaders};
-      if (this.apiEndpoint) {
-        httpOptions.baseUrl = this.apiEndpoint;
-        logger.debug(`Using custom API endpoint: ${this.apiEndpoint}`);
 
-        // For Gemini 3 preview models on aiplatform.googleapis.com, we need to:
-        // 1. Use the baseUrl that includes /v1/publishers/google path
-        // 2. Prevent the SDK from adding its own API version prefix
-        // The baseUrl already contains the version, so we don't need apiVersion
-        if (this.isGemini3Preview) {
-          // Set empty apiVersion to prevent SDK from adding version prefix
-          // since the version is already included in the baseUrl
-          httpOptions.apiVersion = '';
-          logger.info(
-            `Gemini 3 preview mode: using direct API path without version prefix`,
-          );
-        }
+      if (this.isGemini3Preview && this.vertexApiEndpoint) {
+        // Gemini 3 preview → aiplatform.googleapis.com (or its proxy)
+        // vertexApiEndpoint already includes /v1/publishers/google when
+        // using the built-in default; for custom proxies we append it.
+        const isBuiltIn =
+          this.vertexApiEndpoint === GEMINI3_PREVIEW_API_ENDPOINT;
+        httpOptions.baseUrl = isBuiltIn
+          ? this.vertexApiEndpoint
+          : `${this.vertexApiEndpoint}/v1/publishers/google`;
+        httpOptions.apiVersion = '';
+        logger.debug(`Gemini 3 preview endpoint: ${httpOptions.baseUrl}`);
+      } else if (this.apiEndpoint) {
+        // Non-preview → generativelanguage.googleapis.com (or its proxy)
+        // SDK will add /v1beta/ automatically.
+        httpOptions.baseUrl = this.apiEndpoint;
+        logger.debug(`API endpoint: ${httpOptions.baseUrl}`);
       }
 
       // Explicitly set vertexai: false to prevent SDK from auto-detecting
@@ -620,14 +634,16 @@ export class Gemini extends BaseLlm {
         headers: this.trackingHeaders,
         apiVersion: this.liveApiVersion,
       };
-      if (this.apiEndpoint) {
-        httpOptions.baseUrl = this.apiEndpoint;
 
-        // For Gemini 3 preview models, the baseUrl already contains the version
-        // so we don't need the SDK to add another version prefix
-        if (this.isGemini3Preview) {
-          httpOptions.apiVersion = '';
-        }
+      if (this.isGemini3Preview && this.vertexApiEndpoint) {
+        const isBuiltIn =
+          this.vertexApiEndpoint === GEMINI3_PREVIEW_API_ENDPOINT;
+        httpOptions.baseUrl = isBuiltIn
+          ? this.vertexApiEndpoint
+          : `${this.vertexApiEndpoint}/v1/publishers/google`;
+        httpOptions.apiVersion = '';
+      } else if (this.apiEndpoint) {
+        httpOptions.baseUrl = this.apiEndpoint;
       }
 
       this._liveApiClient = new GoogleGenAI({
