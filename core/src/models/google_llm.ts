@@ -168,7 +168,9 @@ export class Gemini extends BaseLlm {
       }
     }
 
-    // AI Studio mode forces non-Vertex AI path with the AI Studio key
+    // AI Studio mode forces non-Vertex AI path with the AI Studio key.
+    // Also clears vertexApiEndpoint so preview models route through AI Studio
+    // rather than the Vertex proxy (matching zero-api agent behavior).
     if (useAiStudioMode) {
       if (useVertexAI) {
         logger.info(
@@ -177,6 +179,7 @@ export class Gemini extends BaseLlm {
       }
       useVertexAI = false;
       this.apiKey = aiStudioApiKey;
+      this.vertexApiEndpoint = undefined;
     }
 
     // For Gemini 3 preview models, force API key mode instead of Vertex AI.
